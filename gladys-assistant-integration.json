@@ -1,176 +1,279 @@
 {
   "manifest_version": 1,
-  "type": "device",
-  "name": "Demo Devices Template",
+  "type": "provider",
+  "name": "FF-Agent",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Real FF-Agent response actions and test alarms. Incoming webhooks not implemented yet.",
+    "fr": "Réponses FF-Agent et déclencheur de test. Réception des webhooks d'alerte pas encore implémentée.",
+    "de": "Echte FF-Agent-Rückmeldungen und Testalarme. Webhook-Empfang noch nicht implementiert."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
-  "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "docker_image": "ghcr.io/stefanbauer/gladys-ff-agent:1.0.0",
+  "gladys_version": ">=5.2.1",
+  "cover_image": "https://raw.githubusercontent.com/stefanbauer/gladys-ff-agent/main/cover.jpg",
+  "categories": ["notifications", "services"],
+  "location": true,
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Real FF-Agent responses",
+        "fr": "Réponses FF-Agent réelles",
+        "de": "Echte FF-Agent-Rückmeldungen"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Accept/reject buttons and scene actions send real HTTP requests using the configured reply UUID, without an incident ID. A 2xx response confirms HTTP delivery only, not your operational response in FF-Agent. Redirects are not followed and failed requests are not retried automatically. Check FF-Agent if the result is unclear. Simulate incident creates only a test alarm, but its scenes and response buttons also send real requests. Check reply settings validates local settings without contacting FF-Agent.",
+        "fr": "Les boutons et scènes accepter/refuser envoient de vraies requêtes HTTP avec l'UUID configuré, sans identifiant d'intervention. Un succès HTTP 2xx ne confirme pas votre réponse opérationnelle dans FF-Agent. Aucun suivi de redirection ni nouvelle tentative automatique. Vérifiez FF-Agent en cas de doute. Simuler crée une alerte de test, mais ses scènes et boutons envoient aussi de vraies requêtes. Vérifier la configuration contrôle les réglages locaux sans contacter FF-Agent.",
+        "de": "Zu-/Absagebuttons und Szenenaktionen senden echte HTTP-Anfragen mit der konfigurierten Rückmelde-UUID, ohne Einsatz-ID. HTTP 2xx bestätigt nur die Übertragung, nicht deine tatsächliche Einsatzrückmeldung in FF-Agent. Weiterleitungen werden nicht verfolgt; fehlgeschlagene Anfragen nicht automatisch wiederholt. Bei unklarem Ergebnis in FF-Agent prüfen. Einsatz simulieren erzeugt nur einen Testalarm, dessen Szenen und Rückmeldebuttons aber ebenfalls echt senden. Rückmeldekonfiguration prüfen validiert nur lokale Einstellungen, ohne FF-Agent aufzurufen."
+      }
+    },
+    {
+      "key": "webhook_setup",
+      "type": "section",
+      "label": {
+        "en": "Incoming alarms: webhook setup",
+        "fr": "Alertes entrantes : configuration du webhook",
+        "de": "Alarmeingang: Webhook einrichten"
+      },
+      "description": {
+        "en": "Not active yet: this scaffold does not receive FF-Agent webhooks and has no alarm URL. Once reception is implemented, link the intended Gladys instance to Plus, create an Open API key in Plus and save it in this page's native Webhooks section. Gladys will display the complete URL there; it contains a secret and must not be shared. Keep the existing production Plus link unchanged during local development. FF-Agent cannot reach this Mac through localhost; use the authenticated local REST simulation for development.",
+        "fr": "Pas encore actif : cette base ne reçoit pas de webhooks FF-Agent et ne fournit pas d'URL d'alerte. Une fois la réception implémentée, liez l'instance Gladys souhaitée à Plus, créez une clé Open API dans Plus et enregistrez-la dans la section Webhooks native de cette page. Gladys y affichera l'URL complète ; elle contient un secret, ne la partagez pas. Ne modifiez pas la liaison Plus de production pour le développement local. FF-Agent ne peut pas joindre ce Mac via localhost ; utilisez la simulation REST locale authentifiée.",
+        "de": "Noch nicht aktiv: Dieses Grundgerüst empfängt keine FF-Agent-Webhooks und bietet noch keine Alarm-URL. Sobald der Empfang implementiert ist: gewünschte Gladys-Instanz mit Plus verbinden, in Plus einen Open-API-Key erzeugen und im nativen Bereich Webhooks dieser Seite speichern. Gladys zeigt dort die vollständige URL an; sie enthält ein Geheimnis und darf nicht geteilt werden. Die bestehende produktive Plus-Verknüpfung für die lokale Entwicklung nicht ändern. FF-Agent erreicht dieses MacBook nicht über localhost; lokal die authentifizierte REST-Simulation verwenden."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://gladysassistant.com/docs/plus/open-api/",
+          "label": {
+            "en": "Gladys Plus Open API",
+            "fr": "Open API Gladys Plus",
+            "de": "Gladys Plus Open API"
+          }
+        },
+        {
+          "url": "https://gladysassistant.com/docs/api/rest-api/",
+          "label": { "en": "Local REST API", "fr": "API REST locale", "de": "Lokale REST-API" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "ff_agent_webhook_fields",
+      "type": "section",
+      "label": {
+        "en": "FF-Agent: Generic webhook form",
+        "fr": "FF-Agent : formulaire Webhook générique",
+        "de": "FF-Agent: Formular Generischer Webhook"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "Prepare these fields, but do not enable delivery yet:\nRemark: Gladys – FF-Agent incident alert.\nMethod: POST. Protocol: https://. URL: pending; later copy the Gladys Webhooks URL, omitting https:// if the protocol is selected separately. Never use the personal accept/reject link here.\nBasic authentication: leave unset. Additional headers: none; the Plus key will be part of the URL.\nContent format: JSON. FF-Agent sets Content-Type automatically.\nBody: pending; confirm FF-Agent's supported variables for incident ID, title, category, location and timestamp first. Do not use invented placeholders or the value 30 as an alarm payload.\nFF-Agent limits connection and request processing to 5 seconds each. Confirm delivery with a test alarm before operational use.",
+        "fr": "Préparez ces champs sans activer l'envoi :\nRemarque : Gladys – alerte FF-Agent.\nMéthode : POST. Protocole : https://. URL : à venir ; copiez ensuite l'URL Webhooks Gladys sans https:// si le protocole est choisi séparément. Ne pas utiliser le lien personnel accepter/refuser.\nAuthentification basique : aucune. En-têtes supplémentaires : aucun ; la clé Plus sera dans l'URL.\nFormat : JSON. FF-Agent définit Content-Type automatiquement.\nCorps : à définir après confirmation des variables FF-Agent pour identifiant, titre, catégorie, lieu et horodatage. Ne pas inventer de variables ni utiliser 30 comme alerte.\nFF-Agent limite la connexion et le traitement à 5 secondes chacun. Vérifiez l'envoi avec une alerte de test avant tout usage réel.",
+        "de": "Diese Felder vorbereiten, Versand noch nicht aktivieren:\nBemerkung: Gladys – FF-Agent Einsatzalarmierung.\nVersand: POST. Protokoll: https://. URL: noch ausstehend; später die Gladys-Webhooks-URL übernehmen, ohne https:// bei separater Protokollauswahl. Hier niemals den persönlichen Zu-/Absagelink einsetzen.\nBasis-Authentifizierung: nicht setzen. Zusätzliche Header: keine; der Plus-Key steckt später in der URL.\nInhalt / Format: JSON. FF-Agent setzt Content-Type automatisch.\nBody: noch festzulegen; zuerst FF-Agent-Platzhalter für Einsatz-ID, Stichwort, Kategorie, Ort und Zeitstempel bestätigen. Keine erfundenen Platzhalter oder den Wert 30 als Alarmdaten verwenden.\nFF-Agent begrenzt Verbindungsaufbau und Verarbeitung auf jeweils 5 Sekunden. Vor echtem Einsatz mit einem Testalarm prüfen."
+      }
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
+      "key": "reply_uuid",
+      "type": "string",
+      "label": { "en": "Reply UUID", "fr": "UUID de réponse", "de": "Rückmelde-UUID" },
       "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+        "en": "UUID from your personal accept/reject link. It stays visible and editable. Response actions need no additional incident ID and send real requests.",
+        "fr": "UUID de votre lien personnel accepter/refuser, visible et modifiable. Les actions envoient de vraies requêtes sans identifiant d'intervention supplémentaire.",
+        "de": "UUID aus deinem persönlichen Zu-/Absagelink. Sie bleibt sichtbar und bearbeitbar. Rückmeldeaktionen senden echt und benötigen keine zusätzliche Einsatz-ID."
+      }
     },
     {
-      "key": "unit",
+      "key": "transport",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
+      "default": "CAR",
+      "label": { "en": "Transport", "fr": "Déplacement", "de": "Anreiseart" },
+      "description": {
+        "en": "Transport sent with an acceptance. Rejections only use the reply UUID.",
+        "fr": "Déplacement envoyé avec l'acceptation. Le refus utilise uniquement l'UUID.",
+        "de": "Anreiseart bei einer Zusage. Eine Absage verwendet nur die Rückmelde-UUID."
+      },
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        { "value": "CAR", "label": { "en": "Car", "fr": "Voiture", "de": "Auto" } },
+        { "value": "BICYCLE", "label": { "en": "Bicycle", "fr": "Vélo", "de": "Fahrrad" } },
+        { "value": "FEET", "label": { "en": "On foot", "fr": "À pied", "de": "Zu Fuß" } }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "home_house",
+      "type": "select",
+      "source": "houses",
+      "label": { "en": "Home in Gladys", "fr": "Maison dans Gladys", "de": "Zuhause in Gladys" },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
-      },
-      "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+        "en": "Use this Gladys house's coordinates. No manual latitude or longitude; the house must have a location.",
+        "fr": "Utilise les coordonnées de cette maison Gladys. Aucune saisie de latitude ou longitude ; la maison doit être localisée.",
+        "de": "Koordinaten dieses Gladys-Hauses verwenden. Keine separate Eingabe von lat/lng; beim Haus muss ein Standort hinterlegt sein."
+      }
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "check_response_settings",
+      "label": {
+        "en": "Check reply settings (no request)",
+        "fr": "Vérifier la configuration (sans envoi)",
+        "de": "Rückmeldekonfiguration prüfen (ohne Aufruf)"
+      }
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "simulate_incident",
+      "label": {
+        "en": "Simulate incident",
+        "fr": "Simuler une intervention",
+        "de": "Einsatz simulieren"
+      },
+      "timeout_seconds": 15
+    },
+    {
+      "key": "accept_incident",
+      "label": {
+        "en": "Accept incident",
+        "fr": "Accepter",
+        "de": "Einsatz zusagen"
+      },
+      "timeout_seconds": 15
+    },
+    {
+      "key": "decline_incident",
+      "label": {
+        "en": "Decline incident",
+        "fr": "Refuser",
+        "de": "Einsatz absagen"
+      },
+      "timeout_seconds": 15
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+      "key": "incident_received",
+      "label": {
+        "en": "Incident received",
+        "fr": "Intervention reçue",
+        "de": "Einsatz eingegangen"
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "key": "category",
+          "type": "string",
+          "label": {
+            "en": "Category (optional filter)",
+            "fr": "Catégorie (filtre optionnel)",
+            "de": "Kategorie (optionaler Filter)"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "incident_id",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": { "en": "Incident ID", "fr": "Identifiant", "de": "Einsatz-ID" }
+        },
+        {
+          "key": "title",
+          "type": "string",
+          "label": { "en": "Title", "fr": "Titre", "de": "Stichwort" }
+        },
+        {
+          "key": "category",
+          "type": "string",
+          "label": { "en": "Category", "fr": "Catégorie", "de": "Kategorie" }
+        },
+        {
+          "key": "location",
+          "type": "string",
+          "label": { "en": "Location", "fr": "Lieu", "de": "Einsatzort" }
+        },
+        {
+          "key": "received_at",
+          "type": "string",
+          "label": { "en": "Received at", "fr": "Reçu le", "de": "Empfangen am" }
+        },
+        {
+          "key": "simulated",
+          "type": "boolean",
+          "label": { "en": "Simulated", "fr": "Simulé", "de": "Simuliert" }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "accept_incident",
+      "label": {
+        "en": "Accept incident",
+        "fr": "Accepter",
+        "de": "Einsatz zusagen"
       },
       "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
       "outputs": [
         {
-          "key": "signalled",
+          "key": "response",
+          "type": "string",
+          "label": { "en": "Response", "fr": "Réponse", "de": "Rückmeldung" }
+        },
+        {
+          "key": "confirmed",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": {
+            "en": "Confirmed by FF-Agent",
+            "fr": "Confirmé par FF-Agent",
+            "de": "Von FF-Agent bestätigt"
+          }
+        },
+        {
+          "key": "http_status",
+          "type": "number",
+          "label": { "en": "HTTP status", "fr": "Statut HTTP", "de": "HTTP-Status" }
+        }
+      ]
+    },
+    {
+      "key": "decline_incident",
+      "label": {
+        "en": "Decline incident",
+        "fr": "Refuser",
+        "de": "Einsatz absagen"
+      },
+      "timeout_seconds": 15,
+      "outputs": [
+        {
+          "key": "response",
+          "type": "string",
+          "label": { "en": "Response", "fr": "Réponse", "de": "Rückmeldung" }
+        },
+        {
+          "key": "confirmed",
+          "type": "boolean",
+          "label": {
+            "en": "Confirmed by FF-Agent",
+            "fr": "Confirmé par FF-Agent",
+            "de": "Von FF-Agent bestätigt"
+          }
+        },
+        {
+          "key": "http_status",
+          "type": "number",
+          "label": { "en": "HTTP status", "fr": "Statut HTTP", "de": "HTTP-Status" }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "incident",
+      "label": {
+        "en": "FF-Agent incident",
+        "fr": "Intervention FF-Agent",
+        "de": "FF-Agent Einsatz"
       },
-      "icon": "activity",
+      "description": {
+        "en": "Latest test incident with real FF-Agent response buttons.",
+        "fr": "Dernière alerte de test avec des boutons de réponse FF-Agent réels.",
+        "de": "Letzter Testeinsatz mit echten FF-Agent-Rückmeldebuttons."
+      },
+      "icon": "alert-triangle",
       "action_timeout_seconds": 15
     }
   ]
