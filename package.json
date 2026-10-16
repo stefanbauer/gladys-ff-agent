@@ -1,19 +1,24 @@
 {
-  "name": "gladys-integration-template-js",
+  "name": "gladys-ff-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "Official starter template to build an external integration for Gladys Assistant with the JavaScript SDK.",
+  "description": "FF-Agent response actions and test incident triggers for Gladys Assistant.",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node scripts/dev.mjs run",
+    "dev": "node --watch --watch-path=src --watch-path=index.js --watch-path=gladys-assistant-integration.json --watch-path=scripts/dev.mjs scripts/dev.mjs run",
+    "dev:login": "node scripts/dev.mjs login",
+    "dev:sync": "node scripts/dev.mjs sync",
+    "dev:prepare": "node scripts/dev.mjs prepare",
+    "dev:connect": "node scripts/dev.mjs connect",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "dependencies": {
     "@gladysassistant/integration-sdk": "^0.15.0"

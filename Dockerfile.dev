@@ -1,0 +1,6 @@
+# Registration container only. The SDK runs on the host through npm run dev.
+# Keeping this container alive prevents the Gladys supervisor from restarting
+# a second SDK client, which would steal the host process's WebSocket.
+FROM node:24-alpine
+USER node
+CMD ["sleep", "infinity"]
