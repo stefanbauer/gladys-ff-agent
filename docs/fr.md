@@ -1,67 +1,55 @@
-# Template de démonstration
+# FF-Agent pour Gladys Assistant
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Cette intégration externe de type provider nécessite Gladys Assistant 5.2.1 ou plus.
+**Les actions accepter/refuser envoient de vraies requêtes HTTP à FF-Agent.** La
+réception des alertes n'est pas encore implémentée. Un succès HTTP ne prouve pas
+l'enregistrement de la réponse opérationnelle ; vérifiez-la dans FF-Agent.
 
-## Ce que vous obtenez
+## Configuration et utilisation
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+Installez l'image de développement et le manifest local selon le README du dépôt,
+puis démarrez le processus Node local. Dans Configuration, cliquez sur **Simuler
+une intervention**. Ajoutez **Intervention FF-Agent** au tableau de bord pour voir
+la dernière intervention et les boutons de réponse avec confirmation. Ils envoient
+de vraies requêtes, même pour une alerte de test. **Les scènes de test peuvent aussi
+envoyer des réponses réelles.** Les actions de configuration et de scène ne demandent
+ni identifiant d'intervention supplémentaire ni alerte préalable.
 
-## Configuration
+L'UUID reste visible et modifiable. Une acceptation nécessite aussi le déplacement
+(CAR/BICYCLE/FEET) et une maison Gladys. Le refus utilise uniquement l'UUID.
+Les coordonnées proviennent de la maison sélectionnée,
+avec l'autorisation de localisation déclarée. **Vérifier la configuration** contrôle
+ces données sans contacter FF-Agent ni afficher l'UUID ou les coordonnées. La
+simulation n'exige pas ces réglages. Ne partagez jamais de liens personnels de réponse.
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+## Préparer le webhook générique FF-Agent
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+La page de configuration explique directement les champs FF-Agent. N'activez pas
+encore l'envoi : la réception et le JSON final ne sont pas implémentés. Préparez
+POST, HTTPS, aucune authentification basique, aucun en-tête supplémentaire et le
+format JSON (FF-Agent définit Content-Type automatiquement). Une fois la réception
+implémentée, la section Webhooks native de Gladys permettra d'enregistrer la clé
+Open API Plus et d'obtenir l'URL complète. Retirez `https://` du champ URL FF-Agent
+si son sélecteur de protocole l'ajoute déjà. L'URL est secrète ; ne pas utiliser le
+lien personnel d'acceptation ou de refus comme point d'entrée des alertes.
 
-## Actions
+Le corps nécessite des variables FF-Agent et leur échappement JSON confirmés,
+pas des variables inventées. Le formulaire limite connexion et traitement à cinq
+secondes chacun. Testez l'envoi avant tout usage réel. FF-Agent ne peut pas joindre
+ce Mac via localhost ; la simulation REST locale est distincte du futur test via
+Plus. Ne modifiez pas la liaison Plus de production existante.
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+Le déclencheur **Intervention reçue** expose `incident_id`, `title`, `category`,
+`location`, `received_at` et `simulated`. Le filtre de catégorie optionnel accepte
+`exercise` pour les tests. **Accepter** et **Refuser** n'ont pas de champs. Sorties :
+`response`, `http_status` et `confirmed: false`. Le champ `simulated` du déclencheur
+décrit uniquement l'alerte. Délai de cinq secondes, sans nouvelle tentative ni
+redirection automatique. Vérifiez FF-Agent avant de répéter un résultat incertain.
 
-## Scènes
+## Limites et dépannage
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
-
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
-
-## Tableau de bord
-
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
-
-## Dépannage
-
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Seule la dernière intervention fictive reste en mémoire ; un redémarrage l'efface.
+Docker Desktop et Node 24 sont requis pour le développement local. Laissez le
+conteneur d'enregistrement actif et ne connectez qu'un seul processus SDK par selector.
+`npm run dev` synchronise automatiquement l'enregistrement et le jeton. Ne commitez jamais de jetons
+ni de données opérationnelles. Consultez le README pour les instructions détaillées.

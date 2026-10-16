@@ -1,61 +1,54 @@
-# Demo Devices Template
+# FF-Agent for Gladys Assistant
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+This external provider integration targets Gladys Assistant 5.2.1 or newer.
+**Accept/reject actions send real HTTP requests to FF-Agent.** Incoming alarms
+are not implemented yet. HTTP success does not prove FF-Agent recorded the mission
+response; check it there. This does not replace official alarm systems.
 
-## What you get
+## Configuration and use
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+Install the local development image and manifest as described in the repository README.
+Start the integration's local Node process. In Configuration, press **Simulate incident**.
+Add **FF-Agent incident** to a dashboard to see the latest incident and its response
+buttons. Widget buttons require confirmation and send real requests, even for a test
+alarm. **Test scenes can also send real responses.** Configuration and scene actions
+need no additional incident ID and no prior alarm.
 
-## Configuration
+The reply UUID stays visible and editable. Acceptance also requires transport
+(CAR/BICYCLE/FEET) and a native Gladys house selection. Rejection only needs the UUID.
+Coordinates come from the selected Gladys house, requiring
+the declared location permission. **Check reply settings** validates these values
+without contacting FF-Agent or displaying the UUID or coordinates. Simulation
+does not require these settings. Never share personal reply links.
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+## Prepare the FF-Agent generic webhook
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+The configuration page explains the FF-Agent form directly. Do not enable delivery
+yet: reception and the final JSON payload are not implemented. Prepare POST, HTTPS,
+no Basic authentication, no additional headers, and JSON format (FF-Agent sets
+Content-Type automatically). Once reception is implemented, use Gladys' native
+Webhooks section to save the Plus Open API key and obtain the complete URL. Omit
+`https://` from FF-Agent's URL field if its protocol dropdown already supplies it.
+The URL is secret; never use a personal accept/reject link as the alarm endpoint.
 
-## Actions
+The body needs confirmed FF-Agent incident variables and JSON escaping, not guessed
+placeholders. Connection and processing each have a five-second timeout according
+to the FF-Agent form. Test delivery before operational use. FF-Agent cannot reach
+this Mac through localhost: local authenticated REST simulation is separate from
+the eventual Plus delivery test. Do not change the existing production Plus link.
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+The scene trigger **Incident received** exposes `incident_id`, `title`, `category`,
+`location`, `received_at`, and `simulated`. The optional category filter matches
+`exercise` for test alarms. **Accept incident** and **Decline incident** need no
+fields. Their outputs are `response`, `http_status` and `confirmed: false`; the
+trigger's `simulated` flag describes the alarm only. Requests time out after five
+seconds with no automatic retries or redirects. Check FF-Agent before retrying
+an uncertain result.
 
-## Scenes
+## Limitations and troubleshooting
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
-
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
-
-## Dashboard
-
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
-
-## Troubleshooting
-
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+Only the latest synthetic incident is held in memory; restarting clears it.
+Docker Desktop and Node 24 are required for the documented local setup. Keep the
+registration container running and use only one active SDK process per selector.
+`npm run dev` synchronizes registration and the integration token automatically. Never commit
+tokens or actual incident data. See the repository README for setup and logs.

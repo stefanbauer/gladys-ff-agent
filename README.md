@@ -1,446 +1,237 @@
-# Gladys external integration — JavaScript template
+# FF-Agent für Gladys Assistant
 
-Official starter template for building an **external integration** for
-[Gladys Assistant](https://gladysassistant.com) with the JavaScript SDK
-[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js).
+Eigenständige externe `provider`-Integration für Gladys Assistant **ab 5.2.1**,
+auf Basis des [offiziellen JavaScript-Templates](https://github.com/GladysAssistant/integration-template-js)
+und des offiziellen SDK 0.15.0. Keine Änderungen am Gladys-Kern erforderlich.
 
-> Fork it, add the GitHub topic `gladys-assistant-integration`, push a
-> multi-arch image, bump the version — that's publishing. No account, no review.
+> **Rückmeldeaktionen senden echt an FF-Agent.** Kein Simulationsmodus für Zu-/Absagen.
+> HTTP-Erfolg ist noch keine bestätigte Einsatzrückmeldung; die FF-Agent-Antwortsemantik
+> muss praktisch geprüft werden. Der Empfang echter Alarme fehlt noch. „Einsatz simulieren“
+> erzeugt Testdaten, kann aber Szenen mit echten Rückmeldeaktionen auslösen.
 
-## What this template demonstrates
+## Was bereits funktioniert
 
-This is **not** a 40-line hello-world: it deliberately shows several **device
-types** so you can copy the one closest to your hardware. Everything lives in
-the [`src/devices/`](./src/devices) folder (one file per device type), and every
-place where you would talk to your real hardware / cloud API is marked with a
-`DO THE WORK` comment and a `logger` call.
+- „Einsatz simulieren“ in der Integrationskonfiguration publiziert den Trigger
+  `incident_received` mit ID, Stichwort, Kategorie, Ort, Zeitpunkt und `simulated: true`.
+- Die Aktionen `accept_incident` und `decline_incident` senden HTTP-GET-Anfragen
+  an die persönlichen FF-Agent-Rückmeldelinks. Keine zusätzliche Einsatz-ID nötig,
+  auch kein zuvor empfangener oder simulierter Alarm.
+- Das Widget **FF-Agent Einsatz** zeigt den letzten Übungseinsatz mit bestätigungspflichtigen
+  Zu-/Absagebuttons. Veraltete Widget-Klicks werden abgewiesen.
+- Dieselben Rückmeldeoperationen stehen als Konfigurationsbuttons bereit.
+- Sichtbares, bearbeitbares UUID-Feld, Anreise-Dropdown und native Gladys-Hausauswahl.
+  „Rückmeldekonfiguration prüfen“ liest die Koordinaten des gewählten Hauses, ohne
+  FF-Agent aufzurufen oder UUID/Koordinaten im Ergebnis auszugeben.
+- Englische, französische und deutsche Beschriftungen und Nutzerdokumentation.
 
-| Device                 | Type illustrated                                                         | SDK hooks used                                                      |
-| ---------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| Weather station        | Read-only sensors (temperature + humidity), **real data** via Open-Meteo | `onPoll`, `publishStates`, `onAction`                               |
-| Living room switch     | Binary actuator (ON/OFF)                                                 | `onSetValue`, `publishState`                                        |
-| Living room light      | Dimmable light (on/off **+** brightness), `identify` action target       | `onSetValue` per feature, `identify`                                |
-| Office plug            | Mixed: actuator **+** power metering, transport badge **+ degraded**     | `onSetValue`, `onPoll`, `publishChangedStates`, `publishTransports` |
-| Entrance motion sensor | Push / event-driven sensor **+** scene trigger                           | `startPush`, `publishState`, `publishSceneEvent`                    |
-| Entrance camera        | Camera images: periodic snapshot **+** on-demand fresh capture           | `publishCameraImage`, `onGetImage`                                  |
+## Lokal entwickeln
 
-On top of the devices, it demonstrates the three **capability** surfaces of
-SDK v0.14 — scene triggers, scene actions and dashboard widgets, **Gladys
-5.1+** — built on the same demo devices (see
-[below](#scene-triggers-scene-actions-and-dashboard-widgets)):
-
-| Capability                     | Manifest key      | Code                                                           | SDK hooks used                                          |
-| ------------------------------ | ----------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
-| Scene trigger: motion detected | `motion_detected` | [`src/devices/motionSensor.js`](./src/devices/motionSensor.js) | `publishSceneEvent`                                     |
-| Scene action: identify device  | `identify_device` | [`src/scenes.js`](./src/scenes.js)                             | `onSceneAction`                                         |
-| Dashboard widget: demo status  | `demo_status`     | [`src/widgets.js`](./src/widgets.js)                           | `onWidgetGet`, `onWidgetAction`, `requestWidgetRefresh` |
-
-The wiring (connection, auth, reconnection, dispatch) is in
-[`index.js`](./index.js) — you rarely need to touch it.
-
-## Project structure
-
-```
-.
-├─ index.js                          # SDK bootstrap + event wiring (no device logic)
-├─ src/
-│  ├─ devices/                       # ← one file per device type (edit these)
-│  │  ├─ index.js                    #   registry: list your devices here
-│  │  ├─ weatherStation.js           #   read-only sensors (poll)
-│  │  ├─ switchDevice.js             #   binary actuator
-│  │  ├─ light.js                    #   dimmable light (on/off + brightness)
-│  │  ├─ plug.js                     #   actuator + power metering + transport badge
-│  │  ├─ motionSensor.js             #   push / event-driven sensor + scene trigger
-│  │  └─ camera.js                   #   camera images (push + pull)
-│  ├─ scenes.js                      # scene actions (Gladys 5.1+)
-│  ├─ widgets.js                     # dashboard widget (Gladys 5.1+)
-│  ├─ weather.js                     # example real "driver" (Open-Meteo)
-│  └─ config.js                      # config defaults + normalization
-├─ docs/
-│  ├─ en.md                          # user documentation (re-hosted by Gladys,
-│  └─ fr.md                          #   linked from the Configuration screen)
-├─ test/                             # unit tests (`node --test`)
-├─ gladys-assistant-integration.json # manifest (name, config schema, image…)
-├─ Dockerfile                        # Node 24 Alpine, read-only rootfs ready
-├─ CHANGELOG.md                      # Keep a Changelog, rolled by the Release workflow
-├─ CLAUDE.md                         # project rules for coding assistants & contributors
-├─ SECURITY.md                       # how to report a vulnerability privately
-├─ .github/workflows/ci.yml          # format, lint, tests (Node 22 + 24), Docker build
-├─ .github/workflows/release.yml     # UI-driven release: bump + changelog + tag + build
-├─ .github/workflows/build.yml       # multi-arch build (git tag or called by release)
-├─ .github/workflows/github-release.yml # GitHub Release of every version tag
-├─ .github/scripts/release.mjs       # release helpers (manifest bump, changelog)
-├─ .github/dependabot.yml            # weekly npm / monthly GitHub Actions updates
-└─ cover.png                         # catalog cover, 800×534 px, ≤150 KB
-```
-
-To add a device type, create a new file in `src/devices/` following the same
-shape as the existing ones, then register it in `src/devices/index.js`. Business
-logic (the device modules) and utilities (`weather.js`, `config.js`) are kept
-separate so the parts you edit stay small.
-
-The plumbing you would otherwise copy into every integration comes straight
-from the SDK (v0.15.0+):
-
-- `logger` / `createLogger({ name })` — leveled console logger (`LOG_LEVEL`
-  env var), with named/child loggers per module. Since SDK v0.4 the SDK also
-  logs its own connection lifecycle (under the `gladys-sdk` name), so
-  connectivity problems show up in `docker logs` without extra code;
-- `DEVICE_FEATURE_CATEGORIES`, `DEVICE_FEATURE_TYPES`, `DEVICE_FEATURE_UNITS`
-  — the standard Gladys categories / types / units, no manual string copying.
-  The catalog grows with the SDK, so bumping the dependency is how you get the
-  newest ones: `battery-storage`, `doorbell` and `water-valve` categories, the
-  climate `fan-speed` / `swing-horizontal` / `swing-vertical` features and the
-  `cubic-meter-per-hour` unit (SDK v0.10), then `charging-station` and
-  `water-heater` categories plus the thermostat `mode` / `operating-state`
-  features (SDK v0.11), then the `grid-sensor` / `home-output-sensor` /
-  `maintenance` categories, the `no2` / `o3` / `so2` gas-concentration
-  sensors, the camera PTZ features (`move` / `preset` / absolute positions),
-  the solar `production` `power` feature and the dynamic `text` `select` type
-  whose per-device choices live in `supported_options` (SDK v0.12), then the
-  camera `enabled` feature (a Gladys-side privacy gate: `0` makes Gladys stop
-  polling, streaming and serving the camera image without deleting the
-  camera), the siren `alarm-mode` / `alarm-state` features and the battery
-  `charging` binary sensor (SDK v0.13), then the `grid-carbon-sensor`
-  category (`carbon-intensity` in the new `gram-co2eq-per-kilowatt-hour`
-  unit, plus the `carbon-free-percentage` / `renewable-percentage` shares of
-  the grid mix — the electricity of a zone, not what a device imports or
-  exports, which stays in `grid-sensor`), the temperature `probe` type (an
-  external probe wired to the device, kept out of the room average), the
-  smoke-sensor `contamination-state` / `muted` / `temporary-mute` features
-  and the single-phase Linky `smaxn1` / `sinsts1` / `imax1` fields (SDK
-  v0.14), then the thermostat `preset` feature — which temperature to aim
-  for, next to the `mode` that says what the machine does (SDK v0.15). A recent
-  category only renders on a Gladys that knows it, so keep the manifest
-  `gladys_version` range in sync with what you publish;
-- `gladys.externalIds(type, platformId)` — builds the unique, stable device
-  and feature external ids;
-- `should_poll` + `DEVICE_POLL_FREQUENCIES` (SDK v0.15) — Gladys calls
-  `onPoll` only for a device published with `should_poll: true` and a
-  `poll_frequency` **in milliseconds** among `DEVICE_POLL_FREQUENCIES` (1 s
-  to 1 min); any other value makes Gladys refuse the whole discovery list
-  with a `400`. Both are read once, when the user creates the device, and a
-  minute is the slowest pace: the weather station and the plug declare
-  `EVERY_MINUTES`, and `createPoller` in
-  [`src/devices/index.js`](./src/devices/index.js) applies the slower
-  refresh interval of the config by skipping the polls in between;
-- `gladys.publishChangedStates(states, { heartbeat })` (SDK v0.15) — the
-  `publishStates` format, minus the values that did not change since the
-  last call: the host API accepts 300 states per minute, sized for changes,
-  not snapshots. The demo plug publishes its power reading with it, so an
-  idle plug sends its 0 W once, then every 30 minutes;
-- `gladys.handleShutdown(cleanup)` — graceful SIGTERM/SIGINT handling;
-- `gladys.setConnectionStatus(connected, message?)` — application-level
-  connection status shown in the Configuration screen (the template reports it
-  after every (re)initialization);
-- `gladys.onAction(key, cb)` — handler of a manifest `actions` button: the
-  template declares a `test_weather` action (manifest `actions` field) and the
-  weather station blueprint implements it, returning the multi-language
-  message displayed under the button;
-- `gladys.publishCameraImage(externalId, image)` / `gladys.onGetImage(cb)`
-  (SDK v0.5) — the camera image channel: push a periodic snapshot and answer
-  on-demand capture requests with an `image/jpg;base64,...` string (≤ 150 KB,
-  max 12 images/minute per device). Dedicated channel: images never go through
-  the states history. See [`src/devices/camera.js`](./src/devices/camera.js);
-- `gladys.publishTransports(entries)` + `DEVICE_TRANSPORTS` (SDK v0.5) — the
-  per-device cloud/local transport badge for dual-channel devices. The
-  manifest declares `"transports": ["local", "cloud"]`, so the Configuration
-  screen shows a standard "Prefer the local connection" toggle whose value
-  arrives as the reserved, read-only config key `GLADYS_PREFER_LOCAL`
-  (boolean, default `true`). The demo plug applies the preference and reports
-  its effective transport. Since SDK v0.7 an entry can also flag a
-  **degraded** state (`{ degraded: true, message }`) — "it works, but not in
-  the nominal mode": the demo plug uses it when local is preferred but the
-  LAN session is refused, so the cloud fallback shows an orange dot with the
-  reason instead of a silently normal badge. See
-  [`src/devices/plug.js`](./src/devices/plug.js);
-- dynamic device selects (SDK v0.7) — a manifest `select` field can replace
-  its static `options` with `"source": "devices"`: the Configuration screen
-  fills it with the integration's own created devices and the handler
-  receives the chosen `external_id`. The template's `identify` action uses it
-  to make the chosen device signal itself — the answer to "act on THIS
-  device" without asking the user to copy an identifier;
-- `section` config blocks + the Documentation link (SDK v0.8) — purely
-  presentational intro blocks in the manifest `config_schema` (title,
-  plain-text description, https links) for the onboarding guidance a compact
-  form cannot carry; they store no value. For the long step-by-step, the
-  Configuration screen shows a permanent **Documentation** link to the repo's
-  [`docs/en.md`](./docs/en.md) / [`docs/fr.md`](./docs/fr.md), re-hosted by
-  Gladys.
-
-The SDK offers more for integrations that need it — OAuth2 cloud flows
-(`onOAuthAuthorizeUrl` / `onOAuthCallback` + an `oauth2` config field, or the
-`account_link` variant — SDK v0.12 — for providers that never redirect back:
-QR sign-in approved in the vendor app, `redirectUri` undefined, no callback,
-the integration polls the provider and reports through
-`setConnectionStatus(true)`), sub-containers (`getContainers`, `startContainer`… + the manifest `containers`
-field, whose published ports now come back as
-`{ container_port, protocol, host_port, label, name, browsable }` — SDK v0.11,
-`host_port` being the one Gladys allocated, `null` until it does, and `name`
-what makes it referenceable in a manifest section text through the
-`{{gladys_host}}` / `{{port:<name>}}` placeholders the frontend substitutes at
-render time), mediated network discovery (`scanNetwork` + the manifest
-`network_discovery` field, for UDP-broadcast / mDNS / SSDP scans from the
-core — including the active query/response variant `udp-active-broadcast`,
-SDK v0.7, where the integration forges the discovery request and the core
-broadcasts it; since SDK v0.13 the results are precisely typed: an `mdns`
-scan browses every declared entry and merges the results, and each `ssdp`
-responder comes back as `{ source_ip, source_mac?, source_port, headers }`,
-`source_mac` being a best-effort ARP-table lookup by the core — when present
-it saves asking the user for a MAC before `wakeOnLan`), communication channels (manifest `type: "communication"`:
-bidirectional Telegram-like bots linked by code — SDK v0.6,
-`publishMessage` / `onSendMessage` / `linkContact` — and, since SDK v0.9,
-send-only notification channels — `messaging: { receive: false }` plus a
-manifest `contact_schema` describing the per-user credentials that
-`onSendMessage(contact, message)` receives), and incoming webhooks relayed
-by Gladys Plus (SDK v0.9: manifest `webhooks` field +
-`getWebhooks` / `onWebhook` / `onWebhookUpdated`, for cloud services that
-push their events Netatmo-style — the demo weather API only supports
-polling, so the template does not declare any), Wake-on-LAN (SDK v0.12:
-`wakeOnLan(mac, options?)` + the manifest `network_wake` field — the core,
-which sits on the host network the bridge container cannot broadcast to,
-builds and emits the standard magic packet itself, rate-limited to 1 wake
-per 2 s per integration), and weather providers
-(SDK v0.11: manifest `type: "weather"`, `onWeatherGet` answering with the
-pivot weather format in the unit system the user asked for, plus the optional
-`onWeatherGetImage` for a vigilance map or a rain radar and
-`requestWeatherRefresh()` to nudge the core into re-pulling instead of waiting
-for its 30-minute check. SDK v0.13 extends the pivot conditions enum with
-`freezing-rain`, `freezing-fog`, `snow-thunderstorm`, `sandstorm`, `tornado`
-and `hurricane` — keep sending the broader condition when your provider
-cannot tell them apart. A provider feeds the dashboard widget and the chat
-assistant, not devices, so it is a different integration type than this
-template's `type: "device"`, even though the demo weather station here reads
-the same kind of API). SDK v0.14 adds three more surfaces: the house
-location (`getHouses()` → `[{ id, name, selector, latitude, longitude }]`,
-gated by a manifest `"location": true` shown on the install screen — for an
-integration that owns its own geo-dependent logic, water restrictions or
-pollen, and polls a third party itself instead of re-asking the coordinates
-in its config; the demo weather station keeps its own `latitude` /
-`longitude` fields on purpose, they are the "coordinates to observe", not
-the home), scene triggers and actions, and dashboard widgets — the last two
-are demonstrated by this template, see the next section. SDK v0.15 adds
-calendar providers (manifest `type: "calendar"`: the integration syncs the
-calendars of the users who enabled it, the core stores them), energy
-contracts (manifest `energy_contracts`: tariff templates offered in the
-Gladys contract wizard, the calendars they need, and
-`publishEnergyConsumption` for suppliers whose readings arrive after the
-fact), `"source": "houses"` selects (the user picks one of the Gladys houses,
-the handler receives its selector), forms on widget buttons (the values the
-user typed reach `onWidgetAction` as `values`, next to `settings`) and
-`parseMdnsTxt(txt)`, which turns the raw TXT entries of an `mdns` scan into
-an object. See the
-[SDK README](https://github.com/GladysAssistant/integration-sdk-js) for the
-other patterns; this template stays focused on devices and the capabilities
-built on them.
-
-## Scene triggers, scene actions and dashboard widgets
-
-Since SDK v0.14, any integration — `device` included — can extend the scene
-editor and the dashboard on top of its primary contract, through three
-manifest capability fields. The template declares one of each, built on its
-demo devices:
-
-- **Scene trigger** `motion_detected` (manifest `scene_triggers`) — every
-  detection of the demo motion sensor fires
-  `gladys.publishSceneEvent('motion_detected', { device, target })`. The
-  scene author filters on the sensor (a `"source": "devices"` select) and on
-  what moved (a `multi_select`), then reads `{{triggerEvent.data.target}}`
-  in the following actions. The state (0/1) stays a device feature published
-  with `publishState`: the event says "this happened, with these details".
-  One event per transition, flat `data` (≤ 30 primitive keys), only the keys
-  declared in `fields` / `variables` kept, 300 events/minute. No handler to
-  register: see [`src/devices/motionSensor.js`](./src/devices/motionSensor.js).
-- **Scene action** `identify_device` (manifest `scene_actions`) — the
-  `identify` operation of the Configuration screen, reachable from a scene.
-  `gladys.onSceneAction(key, cb)` receives the RESOLVED `fields` and returns
-  the declared scalar `outputs` (`{ signalled: true }`). A device that cannot
-  signal itself is an output, not a failure: a scene action is never a
-  condition, the scene author gates on the output. See
-  [`src/scenes.js`](./src/scenes.js).
-- **Dashboard widget** `demo_status` (manifest `widgets`, up to 5) — two
-  **live** `value` tiles bound to device features (`device_feature`: they
-  follow the published states, nothing to refresh), a `status` list computed
-  by the integration (plug connection, observed location) and a `button`
-  whose `action` reaches `gladys.onWidgetAction` (with the `params` the
-  content declared, never user input) and answers a toast. The content is
-  declarative — `text`, `value`, `gauge`, `status`, `chart`, `card-list`,
-  `image`, `button`, colors from `WIDGET_COLORS` — and the core renders it
-  with its own theme, dark mode and translations, no HTML. The core caches it
-  until its `ttl_seconds`; `index.js` calls `gladys.requestWidgetRefresh(key)`
-  after every (re)connection and config update, which change the computed
-  rows. See
-  [`src/widgets.js`](./src/widgets.js).
-
-> **Requires Gladys ≥ 5.1.0.** Older cores reject unknown manifest fields, so
-> declaring `scene_triggers`, `scene_actions` or `widgets` requires a
-> `gladys_version` range starting at **`>=5.1.0`** — the store validator
-> rejects anything lower, and `test/manifest.test.js` catches it before you
-> tag. That is why the template declares `>=5.1.0`. To support older
-> releases, remove the three fields from the manifest along with the code
-> serving them (`src/scenes.js`, `src/widgets.js`, their wiring in
-> `index.js` and the `publishSceneEvent` call of the motion sensor).
-
-The tests show how to keep the declarations and the code in sync:
-
-- [`test/manifest.test.js`](./test/manifest.test.js) — every `scene_actions`
-  key has an `onSceneAction` handler, every `widgets` key an `onWidgetGet`
-  handler, every trigger the devices fire is declared in `scene_triggers`
-  (and the other way round), and `gladys_version` is `>=5.1.0`;
-- [`test/scenes.test.js`](./test/scenes.test.js) — one event per detection,
-  event `data` and action `outputs` limited to their declared keys;
-- [`test/widgets.test.js`](./test/widgets.test.js) —
-  `assert.deepEqual(validateWidgetContent(content), [])` (exported by the
-  SDK: `[]` means rendered exactly as sent, nothing dropped or truncated),
-  live tiles bound to published features, every button action handled;
-- the fake Gladys of the SDK (see [Quality checks](#quality-checks)) records
-  the `publishSceneEvent` and `requestWidgetRefresh` calls.
-
-In development, `DEBUG=gladys-integration-sdk` makes the SDK validate every
-widget content (and image) the handlers resolve and log the violations. A
-widget-only or scene-only integration declares the manifest
-`type: "provider"` instead: no device surface, a configuration-only page.
-
-## Run it locally
+Zwei getrennte Prozesse/Terminals, beide mit Node 24:
 
 ```bash
-npm install
-GLADYS_HOST_API_URL="http://localhost:1443" \
-GLADYS_INTEGRATION_TOKEN="<token>" \
-GLADYS_INTEGRATION_SELECTOR="demo-devices-template" \
-LOG_LEVEL=debug \
+# Terminal 1: Gladys-Backend UND Gladys-Frontend
+cd ~/Herd/gladys
+nvm use 24
 npm start
 ```
 
-The three `GLADYS_*` variables are injected by the Gladys supervisor when the
-integration runs inside its sandboxed container. The SDK reads them
-automatically.
-
-## Quality checks
-
-The template ships with the tooling every integration should keep. The same
-three checks run automatically on every push and pull request, on Node 22 and
-Node 24, along with a build of the Docker image (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
-
 ```bash
-npm run format:check   # Prettier: is everything formatted?
-npm run format         # Prettier: format everything in place
-npm run lint           # ESLint: catch real mistakes (unused vars, dead code…)
-npm test               # Unit tests, via the built-in `node --test` runner
+# Terminal 2: diese Integration
+cd ~/Herd/gladys-ff-agent
+nvm use
+npm run dev
 ```
 
-Tests live in [`test/`](test/) and use Node's native test runner — no extra
-test framework to install. Add a `*.test.js` file next to the ones already
-there and it is picked up automatically.
+`npm start` geht ebenfalls, dann ohne automatischen Neustart bei Änderungen.
+Beim ersten Checkout einmal `npm ci` installieren.
 
-The tests pass the device modules a fake Gladys from the SDK,
-`createFakeGladys()` from `@gladysassistant/integration-sdk/testing` (SDK
-v0.15): a real `GladysIntegration` whose transport is an in-memory Gladys.
-It records what Gladys would receive (`gladys.fake.states`,
-`discoveredDevices`, `sceneEvents`, `widgetRefreshes`…) and refuses the
-payloads the host API refuses, with the same `400`: an invalid category,
-unit or `poll_frequency` fails `npm test`, not the user's discovery. It
-also plays Gladys' side of the WebSocket (`gladys.fake.poll(device)`,
-`setValue`, `action`…) — see the
-[SDK README](https://github.com/GladysAssistant/integration-sdk-js#testing-your-integration).
+### Einmalig: lokale Admin-Sitzung erlauben
 
-[Dependabot](.github/dependabot.yml) opens a pull request every week for the
-npm dependencies — the SDK first of all, which is how new device categories
-and features reach you — and every month for the GitHub Actions; the CI checks
-them like any other change.
-
-## Validate before publishing
-
-Before you tag a release, you can check that your integration passes the store
-validation **locally**, without waiting for the hourly indexer. Run the store's
-validator against your integration directory:
+Docker Desktop und die lokale Gladys-Instanz müssen laufen. Einmal ausführen:
 
 ```bash
-npx github:GladysAssistant/integration-store .
+npm run dev:login
 ```
 
-It runs the exact same checks as the store indexer — manifest JSON & schema,
-Docker image availability (main and sub-containers), cover image (format,
-dimensions, size) and the code rules — and reports **every** problem at once so
-you can fix them in a single pass. It exits `0` when the integration is valid,
-`1` otherwise. A few things can only be confirmed once the repository is public
-(public repo, the `gladys-assistant-integration` topic, and the manifest sitting
-at the root of the default branch), and the tool tells you which ones. See the
-[integration store](https://github.com/GladysAssistant/integration-store) for
-details.
+Mit dem **lokalen Gladys-Admin-Konto** anmelden, nicht mit Gladys Plus. Das Passwort
+wird verdeckt eingegeben und nicht gespeichert. Nur die lokale Refresh-Sitzung
+liegt in `data/dev-session.json` (ignoriert, Dateirechte `600`); sie erlaubt dem
+Entwicklungshelfer Admin-API-Zugriff. Bei Ablauf/Widerruf erneut `dev:login` ausführen.
+Die Sitzung kann in Gladys unter den verbundenen Geräten widerrufen werden.
 
-The validator is not part of the CI: it also checks that the manifest
-`docker_image` exists on its registry, which is only true once the version is
-released. [`test/manifest.test.js`](test/manifest.test.js) catches, on every
-`npm test`, the store rules that are easiest to miss:
+Die Admin-Sitzung wird nur vom lokalen Entwicklungshelfer für die Registrierung
+benötigt, nicht vom Integrationscode selbst. Der laufende SDK-Prozess verwendet
+sein eigenes, auf diese Integration begrenztes Token. Im späteren Produktionsimage
+ist der Entwicklungshelfer nicht enthalten.
 
-- the catalog `description` holds **10 to 100 characters** per language;
-- every text is a **multi-language object** (`{ "en": "…", "fr": "…" }`):
-  `label` and `description`, but also a field `placeholder` — a plain string
-  rejects the manifest;
-- the manifest `version` matches `package.json`, and `docker_image` is tagged
-  with it (the Release workflow writes all three).
+Danach erledigen `npm run dev` und `npm start` die Registrierung selbst:
 
-## Publish in 5 steps
+- Unverändert: kein Build und kein Update; der SDK-Prozess startet direkt.
+- Manifest geändert: lokales Registrierungsimage mit Manifest-Label bauen, die
+  vorhandene Integration über Gladys aktualisieren und das rotierte SDK-Token übernehmen.
+- Keine Registrierung vorhanden: über die lokale API installieren.
+- Im Watch-Modus lösen Code- und Manifeständerungen diesen Ablauf automatisch aus.
+- Selector, gespeicherte Konfiguration und Szenenverweise bleiben beim Update erhalten.
 
-1. **Fork** this template (or use _Use this template_ on GitHub).
-2. **Edit** the files in `src/devices/` and `gladys-assistant-integration.json` for your
-   devices, and replace `docker_image` / `cover_image` with your own. Pick the
-   manifest `categories` (Gladys 4.86+) your integration belongs to — 1 to 3
-   keys among `climate`, `lighting`, `energy`, `security`, `multimedia`,
-   `appliances`, `environment`, `protocols`, `network`, `notifications`,
-   `assistants`, `services` — they are the catalog shelves the integration
-   sits on (without them it only shows under "All" and in search). Declaring
-   the field requires a `gladys_version` range starting at **4.86.0 or
-   later** — older cores reject unknown manifest fields, and the store
-   validator enforces the coupling. The template declares `lighting`,
-   `security` and `environment` to match its demo devices. Keeping the scene
-   and widget capability fields raises that minimum to **5.1.0** (see
-   [above](#scene-triggers-scene-actions-and-dashboard-widgets)).
-3. **Add the GitHub topic** `gladys-assistant-integration` to your repo.
-4. **Release from the GitHub UI**: describe your changes under
-   `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), then open
-   **Actions → Release → Run workflow** and pick `patch`, `minor` or `major`.
-   The workflow bumps the version everywhere (`package.json` + manifest
-   `version`/`docker_image`, and the `docker_image` of the sub-containers
-   running the integration's own image), moves the changelog section under
-   the new version, pushes the `vX.Y.Z` tag, builds the `linux/amd64` + `linux/arm64`
-   image to `ghcr.io` (`:X.Y.Z` and `:latest`), then publishes the GitHub
-   Release of the tag with that changelog section as notes — the Gladys
-   Supervision page links each version to the repository's releases. No local
-   tag, no manual version edit.
-5. The decentralized indexer picks up the new manifest `version` and Gladys
-   offers a one-click install / update.
+Kein manuelles JSON-Kopieren und keine Neuinstallation nach jeder Änderung.
+`npm run dev:sync` gleicht nur die Registrierung ab, ohne den SDK-Prozess zu starten.
+Nur ein Entwicklungsprozess gleichzeitig; vor einem manuellen Sync einen laufenden
+Prozess mit Ctrl+C beenden und danach neu starten. Die Helfer akzeptieren ausschließlich
+Loopback-Adressen und aktualisieren nur das eigene lokale Entwicklungsimage.
 
-> Prefer the terminal? `git tag v1.0.0 && git push --tags` still works — the
-> hand-pushed tag triggers the same multi-arch build and GitHub Release. This
-> path only publishes the Docker tags and the Release, though: it does **not**
-> touch `package.json`, `package-lock.json`, `CHANGELOG.md` or the manifest.
-> Bump `version` in `package.json` and in `gladys-assistant-integration.json`
-> (with the `docker_image` tag) and commit it **before** tagging, or the
-> indexer will keep serving the old version. The Release workflow above does
-> all of this for you.
+Das Repository darf privat bleiben. Kein Registry-Push oder Plus ist zum lokalen
+Testen nötig. `.env.example` dokumentiert die SDK-Variablen. SDK-Token und Admin-Sitzung
+niemals committen oder teilen. Falls ohne automatischen Abgleich gearbeitet werden muss,
+bleiben `dev:prepare` und `dev:connect` verfügbar. Das Image
+`gladys-ff-agent-dev:1.0.0` enthält das Manifest als Label; Gladys kann es im Entwicklermodus
+direkt auslesen. Eine abweichende **lokale** Backend-Adresse kann in `.env` gesetzt werden.
 
-Started from the template? Replace the entries of `CHANGELOG.md` with your
-own, and turn on **Private vulnerability reporting** in the repository's
-security settings: [`SECURITY.md`](SECURITY.md) sends reporters there.
+**Warum ein Registrierungscontainer?** Gladys 5.2.1 installiert externe Integrationen
+über seinen Docker-Supervisor; es gibt keine separate Registrierung für einen
+hostlokalen Node-Prozess. `Dockerfile.dev` hält deshalb nur einen inaktiven Container
+am Leben. Ausschließlich `npm run dev` verbindet das SDK. Ein zweiter aktiver SDK-Client
+würde die WebSocket-Verbindung übernehmen. Dies ist eine lokale Entwicklungshilfe,
+nicht das spätere Produktionsimage. Während der lokale Node-Prozess läuft, ist der
+Dienststatus RUNNING; davor kann ein Verbindungs-Timeout angezeigt werden.
+Der Verbindungsbadge signalisiert die Bereitschaft der HTTP-Aktionen, nicht eine
+geprüfte FF-Agent-Anmeldung oder eine bestätigte Rückmeldung.
 
-Full documentation: <https://gladysassistant.com> (integrations developer guide).
+### Mehrere Integrationen parallel
 
-## Notes
+Gladys nur einmal starten. Jede weitere Integration bekommt ein eigenes Repository,
+ein eigenes Entwicklungsimage, einen eigenen Gladys-Selector und ein eigenes SDK-Token.
+Der FF-Agent-Helfer aktualisiert ausschließlich seinen konfigurierten Selector und
+verweigert Updates fremder Images oder Store-Installationen. Unterschiedliche
+Integrationen können gleichzeitig verbunden sein; zwei Prozesse für **denselben**
+Selector ersetzen hingegen gegenseitig ihre Verbindung. Es sind keine zusätzlichen
+Frontend- oder Backend-Instanzen und für diesen SDK-Betrieb keine weiteren Ports nötig.
 
-- Requires **Node.js ≥ 22** (uses the built-in global `fetch`; no HTTP dep).
-- All external identifiers are prefixed with `ext:<selector>:` — always build
-  them with `gladys.externalIds(type, platformId)` (or the lower-level
-  `gladys.externalId(suffix)`); the server rejects anything else. Derive
-  `platformId` from the unique id the external platform gives you (serial,
-  cloud id, MAC…), never from a hard-coded label.
-- `has_feedback: true` features should publish the state **confirmed by the
-  device**; the template publishes the requested value for simplicity.
-- Replace `cover.png` with your own 800×534 px image (≤150 KB, PNG or JPEG)
-  before publishing. The bundled one is a plain gradient placeholder.
+### Testablauf
 
-## License
+1. Vorher Szenen prüfen: **Testalarme können echte Rückmeldeaktionen auslösen.**
+   Für einen reinen lokalen Test keine Szene mit solchen Aktionen aktivieren.
+2. Unter FF-Agent → Konfiguration **Einsatz simulieren** wählen.
+3. Im Dashboard **FF-Agent Einsatz** hinzufügen. Die Anzeige zeigt Testdaten
+   und warnt, dass Rückmeldebuttons echte Anfragen senden.
+4. „Zusagen“ oder „Absagen“ nur wählen, wenn wirklich eine FF-Agent-Rückmeldung
+   angefragt werden soll. Danach in FF-Agent prüfen, ob sie übernommen wurde.
+5. Für Szenen: Trigger **Einsatz eingegangen** auswählen; Kategorie leer lassen
+   oder `exercise` filtern. Die Rückmeldeaktionen benötigen keine Felder.
 
-Apache-2.0
+`npm run dev` lädt Codeänderungen automatisch neu; dabei geht der simulierte Einsatz verloren.
+Ohne Hot Reload genügt `npm start`. Gladys selbst läuft separat weiter.
+
+### Rückmeldekonfiguration
+
+Die Rückmelde-UUID wird als normales Gladys-Textfeld gespeichert und bleibt beim
+Bearbeiten sichtbar. Keine reale UUID committen oder in Logs ausgeben. Sie stammt aus der Form
+`https://www.ff-agent.com/app2/missionreplies/<UUID>/accept` bzw. `/reject`.
+Nur die eingegebene UUID wird gespeichert; der Link wird daraus bei einer Aktion
+erzeugt. Laut Nutzer benötigen Zu-/Absagen keine zusätzliche Einsatz-ID.
+
+Anreiseart: Auto (`CAR`), Fahrrad (`BICYCLE`), zu Fuß (`FEET`), gemäß Nutzerangaben.
+„Zuhause in Gladys“ ist eine native Hausauswahl. Latitude/Longitude kommen über das
+SDK aus dem **gewählten** Haus, nicht aus einem eigenen Koordinatenformular und nicht
+aus dem ersten Haus der Liste. Deshalb fordert das Manifest `location: true` an.
+Bei fehlendem Standort scheitert die Konfigurationsprüfung verständlich.
+Eine Absage verwendet nur die UUID; Anreiseart und Hauskoordinaten sind dafür nicht nötig.
+
+Es gelten fünf Sekunden HTTP-Timeout, keine automatischen Wiederholungen und keine
+Weiterleitungen. Bei Timeout oder HTTP-Fehler ist unklar, ob FF-Agent die Rückmeldung
+bereits verarbeitet hat: vor erneutem Senden dort prüfen. Ein HTTP-2xx-Ergebnis liefert
+`response`, `confirmed: false` und `http_status` als Szenenausgaben. Es behauptet keine
+fachlich bestätigte Zu-/Absage. Automatisierte Tests verwenden ausschließlich HTTP-Doubles.
+
+### Alarmeingang: Plus später, REST lokal
+
+Vorgesehen ist FF-Agent → Gladys Plus → externer Integrationswebhook → Szenentrigger.
+Der Nutzer erzeugt dazu einen Plus-Open-API-Key. Die vom Gladys-Kern erzeugte URL-Form ist:
+
+```text
+https://api.gladysgateway.com/v1/api/external-integration/<OPEN_API_KEY>/<SELECTOR>/<WEBHOOK_KEY>
+```
+
+Das ist **nicht** der `/device/state`-Endpunkt des älteren Open-API-Tutorials:
+der nimmt Sensorwerte entgegen, keine beliebigen Einsatz-JSONs.
+Erst nach Festlegung des Payloads einen Webhook im Manifest deklarieren und per
+SDK `onWebhook` anbinden. Zurzeit ist bewusst noch keiner registriert.
+Die Konfigurationsseite erklärt bereits die FF-Agent-Formularfelder und den späteren
+nativen URL-Bereich. Die ausführliche [Einrichtungsanleitung](docs/de.md) enthält die Zuordnung.
+
+Für lokale Tests ohne Plus ist bereits die normale, authentifizierte Aktions-API nutzbar:
+
+```bash
+curl -X POST http://localhost:1443/api/v1/external_integration/ext-dev-ff-agent/action/simulate_incident \
+  -H 'Authorization: Bearer <LOKALER_GLADYS_ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  --data '{"fields":{}}'
+```
+
+Sie erzeugt einen synthetischen Einsatz über denselben Handler wie der Konfigurationsbutton.
+Der Access-Token stammt aus der lokalen Benutzeranmeldung, **nicht** aus Plus oder
+der Integrationstoken-`.env`. Der spätere lokale JSON-Testeingang kann eine deklarierte
+Aktion verwenden und denselben Payload-Parser wie der Plus-Webhook aufrufen.
+Gladys 5.2.1 hat keinen äquivalenten lokalen Webhook-POST-Endpunkt. Die produktive,
+bereits mit Plus verbundene Gladys-Instanz wird für diese Entwicklung nicht umgekoppelt.
+
+## Qualität und Container
+
+```bash
+npm run format:check
+npm run lint
+npm test
+npx github:GladysAssistant/integration-store --skip-image-check .
+docker build -t ghcr.io/stefanbauer/gladys-ff-agent:1.0.0 .
+```
+
+Die Tests verwenden die offizielle SDK-Testumgebung und brauchen keine Netzwerkverbindung
+oder FF-Agent-Zugangsdaten. Der Store-Validator benötigt beim ersten Aufruf Internetzugriff.
+`--skip-image-check` ist nötig, solange noch kein Releaseimage veröffentlicht wurde.
+Der normale `Dockerfile` ist das Produktionsimage (non-root, read-only-kompatibel).
+Beim Container-Test **nicht** gleichzeitig einen lokalen SDK-Prozess für denselben Selector starten.
+
+## Nächster Entwicklungsschritt
+
+Als Nächstes: Alarm-JSON und FF-Agent-Platzhalter samt Escapierung klären sowie die
+tatsächliche Zu-/Absagebestätigung prüfen. Keine Bestätigungsstatuscodes raten.
+Der HTTP-Transport liegt bereits in `src/ff-agent.js`; den Alarmeingang separat
+implementieren, inklusive Replay-Erkennung, Ablaufzeiten und sicherer Persistenz.
+Die Gladys-Handler und stabilen Manifest-Schlüssel bleiben die Schnittstelle.
+
+Derzeit keine lokalen HTTP-Webhookports, keine zusätzlichen Geräte und kein Gladys-Plus-Zwang.
+Die dokumentierten Gladys-Webhooks laufen über Gladys Plus; sie sind nicht automatisch
+ein frei erreichbarer lokaler HTTP-Eingang.
+
+## Titelbild
+
+`cover.jpg` liegt wie bei den Referenzintegrationen direkt im Repository-Stamm:
+800 × 534 Pixel, unter 150 KB. Es zeigt das FF-Agent-Logo mit Schriftzug auf einem
+nahtlosen roten Verlauf bis an alle Bildränder, ohne Foto, Rahmen oder Badge.
+Das Manifest verweist auf die GitHub-Rohdatei unter `main/cover.jpg`.
+Das öffentliche Repository macht diese Datei ohne Anmeldung für die lokale
+Gladys-Anzeige erreichbar. Keine Tokens in die Bild-URL einbauen.
+
+## Öffentliches Repository, kein Store-Eintrag
+
+Der Quellcode ist öffentlich, die Integration bleibt ein Entwicklungsstand und
+**darf noch nicht im Gladys Store erscheinen**. Das GitHub-Topic
+`gladys-assistant-integration` deshalb **nicht setzen**: darüber entdeckt der
+offizielle Indexer öffentliche Repositories. Der Repository-Name allein aktiviert
+keine Katalogaufnahme. Lokale Entwicklung benötigt keine Store-Veröffentlichung.
+
+Build-/Release-Workflows aus dem offiziellen Template sind vorbereitet, werden
+aber beim normalen Branch-Push nicht veröffentlicht; CI prüft und baut nur lokal
+im Runner (`push: false`). Keine Release-/Build-and-publish-Workflows manuell starten
+und keine `v*`-Tags pushen: diese Schritte veröffentlichen Images bzw. Releases.
+Eine spätere Veröffentlichung und Store-Aufnahme benötigen eine separate Freigabe.
+Das Produktionsmanifest verweist bereits auf den zukünftigen Image-Namen; das Image
+existiert vor dem ersten Release nicht in GHCR.
+
+## Referenzen
+
+- [Offizielle Anleitung](https://gladysassistant.com/docs/dev/external-integrations/)
+- [Gladys Plus Open API](https://gladysassistant.com/docs/plus/open-api/)
+- [Lokale REST API](https://gladysassistant.com/docs/api/rest-api/)
+- [JavaScript-SDK](https://github.com/GladysAssistant/integration-sdk-js)
+- [Elgato-Beispiel](https://github.com/guim31/gladys-elgato)
+- [Homematic-Beispiel mit Szenen und Buttons](https://github.com/guim31/gladys-homematic-ccu)
