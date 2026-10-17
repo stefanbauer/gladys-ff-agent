@@ -3,9 +3,9 @@
   "type": "provider",
   "name": "FF-Agent",
   "description": {
-    "en": "Real FF-Agent response actions and test alarms. Incoming webhooks not implemented yet.",
-    "fr": "Réponses FF-Agent et déclencheur de test. Réception des webhooks d'alerte pas encore implémentée.",
-    "de": "Echte FF-Agent-Rückmeldungen und Testalarme. Webhook-Empfang noch nicht implementiert."
+    "en": "Receive FF-Agent alarms via Gladys Plus and send acceptance or rejection responses.",
+    "fr": "Recevez les alertes FF-Agent via Gladys Plus et envoyez une acceptation ou un refus.",
+    "de": "FF-Agent-Alarme über Gladys Plus empfangen und Einsätze zu- oder absagen."
   },
   "version": "1.0.0",
   "docker_image": "ghcr.io/stefanbauer/gladys-ff-agent:1.0.0",
@@ -13,6 +13,17 @@
   "cover_image": "https://raw.githubusercontent.com/stefanbauer/gladys-ff-agent/main/cover.jpg",
   "categories": ["notifications", "services"],
   "location": true,
+  "webhooks": [
+    {
+      "key": "incident",
+      "label": {
+        "en": "Incident alarm",
+        "fr": "Alerte d’intervention",
+        "de": "Einsatzalarmierung"
+      },
+      "mode": "fire_and_forget"
+    }
+  ],
   "config_schema": [
     {
       "key": "intro",
@@ -23,51 +34,9 @@
         "de": "Echte FF-Agent-Rückmeldungen"
       },
       "description": {
-        "en": "Accept/reject buttons and scene actions send real HTTP requests using the configured reply UUID, without an incident ID. A 2xx response confirms HTTP delivery only, not your operational response in FF-Agent. Redirects are not followed and failed requests are not retried automatically. Check FF-Agent if the result is unclear. Simulate incident creates only a test alarm, but its scenes and response buttons also send real requests. Check reply settings validates local settings without contacting FF-Agent.",
-        "fr": "Les boutons et scènes accepter/refuser envoient de vraies requêtes HTTP avec l'UUID configuré, sans identifiant d'intervention. Un succès HTTP 2xx ne confirme pas votre réponse opérationnelle dans FF-Agent. Aucun suivi de redirection ni nouvelle tentative automatique. Vérifiez FF-Agent en cas de doute. Simuler crée une alerte de test, mais ses scènes et boutons envoient aussi de vraies requêtes. Vérifier la configuration contrôle les réglages locaux sans contacter FF-Agent.",
-        "de": "Zu-/Absagebuttons und Szenenaktionen senden echte HTTP-Anfragen mit der konfigurierten Rückmelde-UUID, ohne Einsatz-ID. HTTP 2xx bestätigt nur die Übertragung, nicht deine tatsächliche Einsatzrückmeldung in FF-Agent. Weiterleitungen werden nicht verfolgt; fehlgeschlagene Anfragen nicht automatisch wiederholt. Bei unklarem Ergebnis in FF-Agent prüfen. Einsatz simulieren erzeugt nur einen Testalarm, dessen Szenen und Rückmeldebuttons aber ebenfalls echt senden. Rückmeldekonfiguration prüfen validiert nur lokale Einstellungen, ohne FF-Agent aufzurufen."
-      }
-    },
-    {
-      "key": "webhook_setup",
-      "type": "section",
-      "label": {
-        "en": "Incoming alarms: webhook setup",
-        "fr": "Alertes entrantes : configuration du webhook",
-        "de": "Alarmeingang: Webhook einrichten"
-      },
-      "description": {
-        "en": "Not active yet: this scaffold does not receive FF-Agent webhooks and has no alarm URL. Once reception is implemented, link the intended Gladys instance to Plus, create an Open API key in Plus and save it in this page's native Webhooks section. Gladys will display the complete URL there; it contains a secret and must not be shared. Keep the existing production Plus link unchanged during local development. FF-Agent cannot reach this Mac through localhost; use the authenticated local REST simulation for development.",
-        "fr": "Pas encore actif : cette base ne reçoit pas de webhooks FF-Agent et ne fournit pas d'URL d'alerte. Une fois la réception implémentée, liez l'instance Gladys souhaitée à Plus, créez une clé Open API dans Plus et enregistrez-la dans la section Webhooks native de cette page. Gladys y affichera l'URL complète ; elle contient un secret, ne la partagez pas. Ne modifiez pas la liaison Plus de production pour le développement local. FF-Agent ne peut pas joindre ce Mac via localhost ; utilisez la simulation REST locale authentifiée.",
-        "de": "Noch nicht aktiv: Dieses Grundgerüst empfängt keine FF-Agent-Webhooks und bietet noch keine Alarm-URL. Sobald der Empfang implementiert ist: gewünschte Gladys-Instanz mit Plus verbinden, in Plus einen Open-API-Key erzeugen und im nativen Bereich Webhooks dieser Seite speichern. Gladys zeigt dort die vollständige URL an; sie enthält ein Geheimnis und darf nicht geteilt werden. Die bestehende produktive Plus-Verknüpfung für die lokale Entwicklung nicht ändern. FF-Agent erreicht dieses MacBook nicht über localhost; lokal die authentifizierte REST-Simulation verwenden."
-      },
-      "links": [
-        {
-          "url": "https://gladysassistant.com/docs/plus/open-api/",
-          "label": {
-            "en": "Gladys Plus Open API",
-            "fr": "Open API Gladys Plus",
-            "de": "Gladys Plus Open API"
-          }
-        },
-        {
-          "url": "https://gladysassistant.com/docs/api/rest-api/",
-          "label": { "en": "Local REST API", "fr": "API REST locale", "de": "Lokale REST-API" }
-        }
-      ]
-    },
-    {
-      "key": "ff_agent_webhook_fields",
-      "type": "section",
-      "label": {
-        "en": "FF-Agent: Generic webhook form",
-        "fr": "FF-Agent : formulaire Webhook générique",
-        "de": "FF-Agent: Formular Generischer Webhook"
-      },
-      "description": {
-        "en": "Prepare these fields, but do not enable delivery yet:\nRemark: Gladys – FF-Agent incident alert.\nMethod: POST. Protocol: https://. URL: pending; later copy the Gladys Webhooks URL, omitting https:// if the protocol is selected separately. Never use the personal accept/reject link here.\nBasic authentication: leave unset. Additional headers: none; the Plus key will be part of the URL.\nContent format: JSON. FF-Agent sets Content-Type automatically.\nBody: pending; confirm FF-Agent's supported variables for incident ID, title, category, location and timestamp first. Do not use invented placeholders or the value 30 as an alarm payload.\nFF-Agent limits connection and request processing to 5 seconds each. Confirm delivery with a test alarm before operational use.",
-        "fr": "Préparez ces champs sans activer l'envoi :\nRemarque : Gladys – alerte FF-Agent.\nMéthode : POST. Protocole : https://. URL : à venir ; copiez ensuite l'URL Webhooks Gladys sans https:// si le protocole est choisi séparément. Ne pas utiliser le lien personnel accepter/refuser.\nAuthentification basique : aucune. En-têtes supplémentaires : aucun ; la clé Plus sera dans l'URL.\nFormat : JSON. FF-Agent définit Content-Type automatiquement.\nCorps : à définir après confirmation des variables FF-Agent pour identifiant, titre, catégorie, lieu et horodatage. Ne pas inventer de variables ni utiliser 30 comme alerte.\nFF-Agent limite la connexion et le traitement à 5 secondes chacun. Vérifiez l'envoi avec une alerte de test avant tout usage réel.",
-        "de": "Diese Felder vorbereiten, Versand noch nicht aktivieren:\nBemerkung: Gladys – FF-Agent Einsatzalarmierung.\nVersand: POST. Protokoll: https://. URL: noch ausstehend; später die Gladys-Webhooks-URL übernehmen, ohne https:// bei separater Protokollauswahl. Hier niemals den persönlichen Zu-/Absagelink einsetzen.\nBasis-Authentifizierung: nicht setzen. Zusätzliche Header: keine; der Plus-Key steckt später in der URL.\nInhalt / Format: JSON. FF-Agent setzt Content-Type automatisch.\nBody: noch festzulegen; zuerst FF-Agent-Platzhalter für Einsatz-ID, Stichwort, Kategorie, Ort und Zeitstempel bestätigen. Keine erfundenen Platzhalter oder den Wert 30 als Alarmdaten verwenden.\nFF-Agent begrenzt Verbindungsaufbau und Verarbeitung auf jeweils 5 Sekunden. Vor echtem Einsatz mit einem Testalarm prüfen."
+        "en": "Acceptances and rejections work without Gladys Plus or an Open API key. Plus and its key are only needed for incoming FF-Agent alarms; local simulation also works without them.\nResponses send real requests, even for test alarms. HTTP success is not proof of a mission response; check FF-Agent if unclear.",
+        "fr": "Accepter et refuser fonctionne sans Gladys Plus ni clé Open API. Plus et sa clé sont nécessaires uniquement pour recevoir les alertes FF-Agent ; la simulation locale fonctionne aussi sans eux.\nLes réponses sont réelles, même pour les tests. Un succès HTTP ne confirme pas la réponse opérationnelle ; vérifiez FF-Agent en cas de doute.",
+        "de": "Zu- und Absagen funktionieren ohne Gladys Plus oder Open-API-Key. Plus samt Key wird nur für eingehende FF-Agent-Alarme benötigt; lokal simulieren geht ebenfalls ohne.\nRückmeldungen senden echt, auch bei Testalarmen. HTTP-Erfolg bestätigt keine Einsatzrückmeldung; im Zweifel in FF-Agent prüfen."
       }
     },
     {
@@ -75,9 +44,9 @@
       "type": "string",
       "label": { "en": "Reply UUID", "fr": "UUID de réponse", "de": "Rückmelde-UUID" },
       "description": {
-        "en": "UUID from your personal accept/reject link. It stays visible and editable. Response actions need no additional incident ID and send real requests.",
-        "fr": "UUID de votre lien personnel accepter/refuser, visible et modifiable. Les actions envoient de vraies requêtes sans identifiant d'intervention supplémentaire.",
-        "de": "UUID aus deinem persönlichen Zu-/Absagelink. Sie bleibt sichtbar und bearbeitbar. Rückmeldeaktionen senden echt und benötigen keine zusätzliche Einsatz-ID."
+        "en": "FF-Agent → Personal profile → “Weblinks für Einsatzmeldung”. Example: https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept — copy only your UUID in place of the x characters, between /missionreplies/ and /accept (or /reject), not the full URL or its parameters.",
+        "fr": "FF-Agent → Profil personnel → « Weblinks für Einsatzmeldung ». Exemple : https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept — copiez uniquement votre UUID à la place des x, entre /missionreplies/ et /accept (ou /reject), pas l’URL complète ni ses paramètres.",
+        "de": "FF-Agent → Persönliches Profil → „Weblinks für Einsatzmeldung“. Beispiel: https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept — nur deine UUID anstelle der x kopieren, zwischen /missionreplies/ und /accept (oder /reject). Nicht die gesamte URL oder ihre Parameter eintragen."
       }
     },
     {
@@ -102,21 +71,27 @@
       "source": "houses",
       "label": { "en": "Home in Gladys", "fr": "Maison dans Gladys", "de": "Zuhause in Gladys" },
       "description": {
-        "en": "Use this Gladys house's coordinates. No manual latitude or longitude; the house must have a location.",
-        "fr": "Utilise les coordonnées de cette maison Gladys. Aucune saisie de latitude ou longitude ; la maison doit être localisée.",
-        "de": "Koordinaten dieses Gladys-Hauses verwenden. Keine separate Eingabe von lat/lng; beim Haus muss ein Standort hinterlegt sein."
+        "en": "Coordinates for acceptances. Set the location in this house's settings.",
+        "fr": "Coordonnées pour les acceptations. Renseignez le lieu dans cette maison.",
+        "de": "Koordinaten für Zusagen. Beim gewählten Haus muss ein Standort hinterlegt sein."
+      }
+    },
+    {
+      "key": "webhook_setup",
+      "type": "section",
+      "label": {
+        "en": "Set up alarms in FF-Agent",
+        "fr": "Configurer les alertes dans FF-Agent",
+        "de": "Alarmierung in FF-Agent einrichten"
+      },
+      "description": {
+        "en": "Save your Plus Open API key in the Gladys Plus Webhooks card below, then copy its alarm URL into FF-Agent’s “Generic webhook” form.\nPOST · HTTPS · JSON body: {}. No Basic authentication or extra headers. Omit https:// from the URL if the protocol is selected separately.\nKeep the URL private. Send a test alarm from FF-Agent and check reception in Gladys; HTTP 200 alone is not proof of delivery.",
+        "fr": "Enregistrez votre clé Open API Plus dans la carte Webhooks Gladys Plus ci-dessous, puis copiez son URL d’alerte dans le formulaire « Webhook générique » de FF-Agent.\nPOST · HTTPS · corps JSON : {}. Sans authentification basique ni en-têtes supplémentaires. Retirez https:// de l’URL si le protocole est choisi séparément.\nGardez l’URL privée. Envoyez un test depuis FF-Agent et vérifiez sa réception dans Gladys ; HTTP 200 seul ne prouve pas la livraison.",
+        "de": "Plus-Open-API-Key unten in der Karte Gladys-Plus-Webhooks speichern. Die dort angezeigte Alarm-URL in FF-Agent im Formular „Generischer Webhook“ hinterlegen.\nPOST · HTTPS · JSON-Body: {}. Keine Basis-Authentifizierung oder zusätzlichen Header. URL ohne https:// eintragen, wenn das Protokoll separat ausgewählt wird.\nURL geheim halten. Testalarm aus FF-Agent senden und Empfang in Gladys prüfen; HTTP 200 allein bestätigt keine Zustellung."
       }
     }
   ],
   "actions": [
-    {
-      "key": "check_response_settings",
-      "label": {
-        "en": "Check reply settings (no request)",
-        "fr": "Vérifier la configuration (sans envoi)",
-        "de": "Rückmeldekonfiguration prüfen (ohne Aufruf)"
-      }
-    },
     {
       "key": "simulate_incident",
       "label": {
@@ -133,7 +108,28 @@
         "fr": "Accepter",
         "de": "Einsatz zusagen"
       },
-      "timeout_seconds": 15
+      "timeout_seconds": 15,
+      "fields": [
+        {
+          "key": "transport",
+          "type": "select",
+          "label": {
+            "en": "Transport (optional)",
+            "fr": "Déplacement (facultatif)",
+            "de": "Anreiseart (optional)"
+          },
+          "description": {
+            "en": "Leave empty to use the configured default. Overrides transport for this acceptance only.",
+            "fr": "Laisser vide pour utiliser le réglage par défaut. Modifie uniquement cette acceptation.",
+            "de": "Leer lassen für den Standard aus der Konfiguration. Gilt nur für diese Zusage."
+          },
+          "options": [
+            { "value": "CAR", "label": { "en": "Car", "fr": "Voiture", "de": "Auto" } },
+            { "value": "BICYCLE", "label": { "en": "Bicycle", "fr": "Vélo", "de": "Fahrrad" } },
+            { "value": "FEET", "label": { "en": "On foot", "fr": "À pied", "de": "Zu Fuß" } }
+          ]
+        }
+      ]
     },
     {
       "key": "decline_incident",
@@ -153,47 +149,15 @@
         "fr": "Intervention reçue",
         "de": "Einsatz eingegangen"
       },
-      "fields": [
-        {
-          "key": "category",
-          "type": "string",
-          "label": {
-            "en": "Category (optional filter)",
-            "fr": "Catégorie (filtre optionnel)",
-            "de": "Kategorie (optionaler Filter)"
-          }
-        }
-      ],
       "variables": [
-        {
-          "key": "incident_id",
-          "type": "string",
-          "label": { "en": "Incident ID", "fr": "Identifiant", "de": "Einsatz-ID" }
-        },
-        {
-          "key": "title",
-          "type": "string",
-          "label": { "en": "Title", "fr": "Titre", "de": "Stichwort" }
-        },
-        {
-          "key": "category",
-          "type": "string",
-          "label": { "en": "Category", "fr": "Catégorie", "de": "Kategorie" }
-        },
-        {
-          "key": "location",
-          "type": "string",
-          "label": { "en": "Location", "fr": "Lieu", "de": "Einsatzort" }
-        },
         {
           "key": "received_at",
           "type": "string",
-          "label": { "en": "Received at", "fr": "Reçu le", "de": "Empfangen am" }
-        },
-        {
-          "key": "simulated",
-          "type": "boolean",
-          "label": { "en": "Simulated", "fr": "Simulé", "de": "Simuliert" }
+          "label": {
+            "en": "Received at (generated locally)",
+            "fr": "Reçu le (généré localement)",
+            "de": "Empfangen am (lokal erzeugt)"
+          }
         }
       ]
     }
@@ -207,25 +171,36 @@
         "de": "Einsatz zusagen"
       },
       "timeout_seconds": 15,
+      "fields": [
+        {
+          "key": "transport",
+          "type": "select",
+          "label": {
+            "en": "Transport (optional)",
+            "fr": "Déplacement (facultatif)",
+            "de": "Anreiseart (optional)"
+          },
+          "description": {
+            "en": "Leave empty to use the configured default. Overrides transport for this acceptance only.",
+            "fr": "Laisser vide pour utiliser le réglage par défaut. Modifie uniquement cette acceptation.",
+            "de": "Leer lassen für den Standard aus der Konfiguration. Gilt nur für diese Zusage."
+          },
+          "options": [
+            { "value": "CAR", "label": { "en": "Car", "fr": "Voiture", "de": "Auto" } },
+            { "value": "BICYCLE", "label": { "en": "Bicycle", "fr": "Vélo", "de": "Fahrrad" } },
+            { "value": "FEET", "label": { "en": "On foot", "fr": "À pied", "de": "Zu Fuß" } }
+          ]
+        }
+      ],
       "outputs": [
         {
-          "key": "response",
-          "type": "string",
-          "label": { "en": "Response", "fr": "Réponse", "de": "Rückmeldung" }
-        },
-        {
-          "key": "confirmed",
+          "key": "success",
           "type": "boolean",
           "label": {
-            "en": "Confirmed by FF-Agent",
-            "fr": "Confirmé par FF-Agent",
-            "de": "Von FF-Agent bestätigt"
+            "en": "Request successful (HTTP)",
+            "fr": "Requête réussie (HTTP)",
+            "de": "Anfrage erfolgreich (HTTP)"
           }
-        },
-        {
-          "key": "http_status",
-          "type": "number",
-          "label": { "en": "HTTP status", "fr": "Statut HTTP", "de": "HTTP-Status" }
         }
       ]
     },
@@ -239,23 +214,13 @@
       "timeout_seconds": 15,
       "outputs": [
         {
-          "key": "response",
-          "type": "string",
-          "label": { "en": "Response", "fr": "Réponse", "de": "Rückmeldung" }
-        },
-        {
-          "key": "confirmed",
+          "key": "success",
           "type": "boolean",
           "label": {
-            "en": "Confirmed by FF-Agent",
-            "fr": "Confirmé par FF-Agent",
-            "de": "Von FF-Agent bestätigt"
+            "en": "Request successful (HTTP)",
+            "fr": "Requête réussie (HTTP)",
+            "de": "Anfrage erfolgreich (HTTP)"
           }
-        },
-        {
-          "key": "http_status",
-          "type": "number",
-          "label": { "en": "HTTP status", "fr": "Statut HTTP", "de": "HTTP-Status" }
         }
       ]
     }
@@ -269,9 +234,9 @@
         "de": "FF-Agent Einsatz"
       },
       "description": {
-        "en": "Latest test incident with real FF-Agent response buttons.",
-        "fr": "Dernière alerte de test avec des boutons de réponse FF-Agent réels.",
-        "de": "Letzter Testeinsatz mit echten FF-Agent-Rückmeldebuttons."
+        "en": "Open alarms, real response buttons, acceptance display until manually ended and last reply.",
+        "fr": "Alertes, réponses réelles, acceptation jusqu’à clôture manuelle et dernière réponse.",
+        "de": "Offene Alarme, echte Rückmeldebuttons, manuell beendbare Zusageanzeige und letzte Rückmeldung."
       },
       "icon": "alert-triangle",
       "action_timeout_seconds": 15

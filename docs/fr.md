@@ -1,9 +1,12 @@
 # FF-Agent pour Gladys Assistant
 
 Cette intégration externe de type provider nécessite Gladys Assistant 5.2.1 ou plus.
-**Les actions accepter/refuser envoient de vraies requêtes HTTP à FF-Agent.** La
-réception des alertes n'est pas encore implémentée. Un succès HTTP ne prouve pas
+**Les actions accepter/refuser envoient de vraies requêtes HTTP à FF-Agent.** Un succès HTTP ne prouve pas
 l'enregistrement de la réponse opérationnelle ; vérifiez-la dans FF-Agent.
+
+Accepter et refuser ne nécessite ni Gladys Plus ni clé Open API. Plus et sa clé
+servent uniquement à recevoir les vraies alertes FF-Agent par webhook.
+La simulation locale déclenche les scènes sans Plus ni clé.
 
 ## Configuration et utilisation
 
@@ -15,41 +18,89 @@ de vraies requêtes, même pour une alerte de test. **Les scènes de test peuven
 envoyer des réponses réelles.** Les actions de configuration et de scène ne demandent
 ni identifiant d'intervention supplémentaire ni alerte préalable.
 
+Trouvez l’UUID dans **FF-Agent → Profil personnel → « Weblinks für Einsatzmeldung »**.
+Exemple : `https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept`.
+Copiez uniquement votre UUID à la place des x, entre `/missionreplies/` et `/accept`
+ou `/reject`, pas l’URL complète ni ses paramètres comme `?transport=CAR`.
 L'UUID reste visible et modifiable. Une acceptation nécessite aussi le déplacement
 (CAR/BICYCLE/FEET) et une maison Gladys. Le refus utilise uniquement l'UUID.
+Les actions d'acceptation peuvent modifier le déplacement pour cet envoi seulement.
+Laisser le champ vide utilise le réglage par défaut, sans modifier la configuration.
+Cela concerne les scènes et boutons de configuration ; le widget utilise le défaut.
 Les coordonnées proviennent de la maison sélectionnée,
-avec l'autorisation de localisation déclarée. **Vérifier la configuration** contrôle
-ces données sans contacter FF-Agent ni afficher l'UUID ou les coordonnées. La
+avec l'autorisation de localisation déclarée. Les actions vérifient les réglages requis
+avant l’envoi réel, puis contrôlent la réponse HTTP. Aucun bouton de vérification séparé n’est nécessaire. La
 simulation n'exige pas ces réglages. Ne partagez jamais de liens personnels de réponse.
 
-## Préparer le webhook générique FF-Agent
+## Configurer le webhook générique FF-Agent
 
-La page de configuration explique directement les champs FF-Agent. N'activez pas
-encore l'envoi : la réception et le JSON final ne sont pas implémentés. Préparez
-POST, HTTPS, aucune authentification basique, aucun en-tête supplémentaire et le
-format JSON (FF-Agent définit Content-Type automatiquement). Une fois la réception
-implémentée, la section Webhooks native de Gladys permettra d'enregistrer la clé
-Open API Plus et d'obtenir l'URL complète. Retirez `https://` du champ URL FF-Agent
-si son sélecteur de protocole l'ajoute déjà. L'URL est secrète ; ne pas utiliser le
-lien personnel d'acceptation ou de refus comme point d'entrée des alertes.
+Reliez l’instance souhaitée à Gladys Plus. Créez une clé dans Plus → Paramètres →
+Open API et enregistrez-la dans la section native **Webhooks** de cette intégration.
+La carte native **Webhooks Gladys Plus** affiche l’URL complète actuelle, clé incluse.
+Copiez-la dans le formulaire **Webhook générique** de FF-Agent : **POST**, **HTTPS**, **JSON**, corps
+**`{}`**, sans authentification basique ni en-têtes supplémentaires. FF-Agent définit
+Content-Type automatiquement. Retirez `https://` de l’URL si le protocole est choisi
+séparément. Gardez l’URL secrète ; n’utilisez pas le lien personnel de réponse.
+Après changement de clé, récupérez la nouvelle URL et remplacez-la dans FF-Agent.
 
-Le corps nécessite des variables FF-Agent et leur échappement JSON confirmés,
-pas des variables inventées. Le formulaire limite connexion et traitement à cinq
-secondes chacun. Testez l'envoi avant tout usage réel. FF-Agent ne peut pas joindre
-ce Mac via localhost ; la simulation REST locale est distincte du futur test via
-Plus. Ne modifiez pas la liaison Plus de production existante.
+Pour protéger la vie privée, FF-Agent ne fournit aucun détail d'intervention : seul
+un signal d'alerte est nécessaire. Ne pas envoyer d'identifiant, titre, catégorie,
+lieu ou horodatage. Le corps est ignoré ; seul POST déclenche l’alerte. Gladys répond
+immédiatement en mode `fire_and_forget`, sans attendre les scènes. **HTTP 200 ne
+prouve pas la réception :** une intégration arrêtée ou déconnectée peut perdre des
+signaux. Envoyez un test depuis FF-Agent et vérifiez le widget/déclencheur Gladys
+avant tout usage réel. Chaque POST livré compte comme une alerte ; sans identifiant,
+une détection fiable des doublons est impossible. Ceci ne remplace pas l’alarme officielle.
+Le formulaire limite connexion et traitement à cinq secondes chacun. La simulation
+REST locale utilise le même chemin de réception, sans tester FF-Agent → Plus.
+FF-Agent ne peut pas joindre ce Mac via localhost. Ne modifiez pas la liaison Plus
+de production existante.
 
-Le déclencheur **Intervention reçue** expose `incident_id`, `title`, `category`,
-`location`, `received_at` et `simulated`. Le filtre de catégorie optionnel accepte
-`exercise` pour les tests. **Accepter** et **Refuser** n'ont pas de champs. Sorties :
-`response`, `http_status` et `confirmed: false`. Le champ `simulated` du déclencheur
-décrit uniquement l'alerte. Délai de cinq secondes, sans nouvelle tentative ni
-redirection automatique. Vérifiez FF-Agent avant de répéter un résultat incertain.
+Le déclencheur **Intervention reçue** n'a aucun filtre et expose seulement `received_at`,
+généré localement sur le système Gladys (UTC/ISO 8601), jamais fourni par FF-Agent.
+Les tests transmettent les mêmes données minimales, sans indicateur de simulation
+ni détail d'intervention. Le widget identifie les tests et affiche l'heure locale de réception.
+Les deux actions de scène renvoient uniquement `success` : true pour HTTP 2xx (même
+sans intervention active), false en cas de réglages invalides, d'erreur HTTP ou d'envoi
+non confirmé. La scène continue pour permettre l'évaluation de ce résultat.
+Ce succès HTTP ne confirme pas la réponse opérationnelle. Un délai dépassé peut
+survenir après traitement ; false ne doit donc pas déclencher de nouvel envoi automatique.
+Les boutons de configuration et du widget gardent les messages détaillés et erreurs.
+Délai de cinq secondes, sans nouvelle tentative ni redirection automatique.
 
 ## Limites et dépannage
 
-Seule la dernière intervention fictive reste en mémoire ; un redémarrage l'efface.
+Seule la dernière alerte reste en mémoire ; un redémarrage l'efface.
 Docker Desktop et Node 24 sont requis pour le développement local. Laissez le
 conteneur d'enregistrement actif et ne connectez qu'un seul processus SDK par selector.
 `npm run dev` synchronise automatiquement l'enregistrement et le jeton. Ne commitez jamais de jetons
 ni de données opérationnelles. Consultez le README pour les instructions détaillées.
+
+## Widget : alertes et réponses
+
+« En veille » signifie qu’aucune alerte reçue localement n’attend de réponse ; cela
+ne vérifie ni FF-Agent ni la connexion d’alarme. Une alerte affiche un état rouge,
+l’heure de réception et des boutons accepter/refuser avec confirmation. Les tests
+restent identifiés. Après une acceptation HTTP réussie, « Envoyée » reste visible
+jusqu’à l’appui sur « Terminer l’intervention », puis le widget revient en veille
+avec la dernière réponse et son heure. Un refus HTTP
+réussi ou une réponse explicite sans intervention active revient immédiatement en veille.
+Erreur/délai dépassé : l’alerte reste ouverte, sans nouvel envoi automatique.
+Une nouvelle alerte interrompt l’affichage d’acceptation ; les anciens clics ou clics
+simultanés ne peuvent pas l’acquitter. Scènes et configuration actualisent le même
+historique. Cela ne confirme pas la réponse opérationnelle. « Terminer l’intervention »
+réinitialise uniquement l’affichage et n’envoie rien à FF-Agent.
+L’affichage se rafraîchit normalement toutes les dix secondes ; une pause
+du navigateur ou une déconnexion peut retarder l’affichage. Les heures sont en UTC.
+Seules la dernière alerte et la dernière requête réussie restent en mémoire ; un redémarrage les efface.
+
+**Supervision → Démarrer** démarre/redémarre le conteneur Docker, même déjà actif.
+Ce bouton est inutile lorsque l’intégration est connectée et ne lance pas le processus
+Node sur le Mac : utilisez `npm run dev`. **Journaux** lit uniquement la sortie Docker :
+en développement local, consultez le terminal `npm run dev` ; le conteneur d’enregistrement
+inactif n’a pas de journaux applicatifs. Avec l’image de production, actualisez les
+journaux dans Gladys. Les logs techniques sont en anglais et décrivent la réception
+des alertes/tests, la publication des événements, les envois de réponses, les statuts
+HTTP et les erreurs. Aucun UUID, coordonnées, clé, URL, corps de webhook ou réponse brute
+du fournisseur n’est enregistré. La réception ne prouve ni l’exécution des scènes ni la
+réponse opérationnelle. Les erreurs de réponse de l’interface suivent la langue de Gladys.

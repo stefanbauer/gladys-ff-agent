@@ -1,18 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '@gladysassistant/integration-sdk';
-import { getReplySettings, sendReply } from './ff-agent.js';
+import { getReplySettings, localizedError, sendReply } from './ff-agent.js';
 
-const REAL_RESPONSES = {
-  en: 'Real FF-Agent requests, even for test alarms. Verify responses in FF-Agent.',
-  fr: 'Envois réels, même pour les tests. Vérifiez la réponse dans FF-Agent.',
-  de: 'Echte FF-Agent-Anfragen, auch beim Testalarm. Rückmeldung in FF-Agent prüfen.',
+const HISTORY_LABELS = {
+  accepted: { en: 'Acceptance sent', fr: 'Acceptation envoyée', de: 'Zusage gesendet' },
+  declined: { en: 'Rejection sent', fr: 'Refus envoyé', de: 'Absage gesendet' },
+  no_active_incident: {
+    en: 'No active incident',
+    fr: 'Aucune intervention',
+    de: 'Kein aktiver Einsatz',
+  },
 };
 const RESPONSE_LABELS = {
-  pending: { en: 'Pending', fr: 'En attente', de: 'Offen' },
   no_active_incident: {
-    en: 'No matching active incident',
-    fr: 'Aucune intervention active',
-    de: 'Kein passender Einsatz aktiv',
+    en: 'HTTP 200 OK — no active incident',
+    fr: 'HTTP 200 OK — aucune intervention active',
+    de: 'HTTP 200 OK — aktuell kein Einsatz aktiv',
   },
   accepted: {
     en: 'Acceptance sent — unconfirmed',
@@ -26,126 +29,296 @@ const RESPONSE_LABELS = {
   },
 };
 
-// Alarm reception is not implemented yet; the test alarm remains in memory.
+// Only the latest alarm and reply are kept in memory; never webhook payloads.
 export function registerHandlers(gladys, request = globalThis.fetch) {
   let incident = null;
+  let lastReply = null;
+  let replying = false;
 
-  async function simulateIncident() {
+  async function receiveIncident(test = false) {
     incident = {
-      incident_id: `demo-${randomUUID()}`,
-      title: 'DEMO: Technical assistance',
-      category: 'exercise',
-      location: 'Example fire station',
+      // Local widget revision only, never FF-Agent data or a scene variable.
+      incident_id: randomUUID(),
       received_at: new Date().toISOString(),
-      simulated: true,
+      test,
       response: 'pending',
     };
-    const { response: _response, ...event } = incident;
-    await gladys.publishSceneEvent('incident_received', event);
+    logger.info(`${test ? 'Test alarm' : 'Alarm webhook'} received; payload not logged or stored.`);
+    try {
+      await gladys.publishSceneEvent('incident_received', { received_at: incident.received_at });
+      logger.info('Alarm event published to Gladys.');
+    } catch (error) {
+      logger.error('Could not publish alarm event to Gladys.');
+      throw error;
+    }
     gladys.requestWidgetRefresh('incident');
-    return {
-      en: `Demo incident ${event.incident_id} sent to Gladys.`,
-      fr: `Intervention fictive ${event.incident_id} envoyée à Gladys.`,
-      de: `Übungseinsatz ${event.incident_id} an Gladys gesendet.`,
-    };
   }
 
-  async function respond(decision) {
-    const currentIncident = incident;
-    const houses = decision === 'accepted' ? await gladys.getHouses() : [];
-    const settings = getReplySettings(gladys.config, houses, decision);
-    const result = await sendReply(settings, decision, request);
-    // Do not attach an in-flight reply to a different alarm received meanwhile.
-    if (currentIncident) currentIncident.response = result.response;
-    gladys.requestWidgetRefresh('incident');
-    return result;
-  }
-
-  gladys.onAction('check_response_settings', async () => {
-    const houses = await gladys.getHouses();
-    const { house_name, transport } = getReplySettings(gladys.config, houses, 'accepted');
-    return {
-      en: `Settings and coordinates for ${house_name} (${transport}) available. No FF-Agent request sent; this is not a connection test.`,
-      fr: `Configuration et coordonnées de ${house_name} (${transport}) disponibles. Aucun envoi à FF-Agent ; ce n'est pas un test de connexion.`,
-      de: `Einstellungen und Koordinaten für ${house_name} (${transport}) verfügbar. Kein FF-Agent-Aufruf; dies ist kein Verbindungstest.`,
-    };
+  gladys.onWebhook('incident', async ({ method }) => {
+    // A webhook is an alarm signal, not a source of incident details.
+    if (method !== 'POST') {
+      logger.warn('Ignored alarm webhook: POST required.');
+      return;
+    }
+    await receiveIncident();
   });
+
+  async function simulateIncident() {
+    await receiveIncident(true);
+    return {
+      en: 'Test alarm sent to Gladys. Only the locally generated reception time is passed on.',
+      fr: 'Alerte de test envoyée à Gladys. Seule l’heure de réception générée localement est transmise.',
+      de: 'Testalarm an Gladys gesendet. Nur der lokal erzeugte Empfangszeitpunkt wird weitergegeben.',
+    };
+  }
+
+  async function respond(decision, { transport } = {}) {
+    if (replying) {
+      throw localizedError({
+        en: 'A reply is already being sent. Please wait and check FF-Agent before retrying.',
+        fr: 'Une réponse est déjà en cours. Patientez et vérifiez FF-Agent avant de réessayer.',
+        de: 'Eine Rückmeldung wird bereits gesendet. Bitte warten und vor erneutem Senden FF-Agent prüfen.',
+      });
+    }
+    replying = true;
+    const currentIncident = incident;
+    try {
+      let settings;
+      try {
+        const houses = decision === 'accepted' ? await gladys.getHouses() : [];
+        settings = getReplySettings(
+          { ...gladys.config, transport: transport || gladys.config.transport },
+          houses,
+          decision,
+        );
+      } catch (error) {
+        logger.warn(
+          `Reply ${decision} not sent: check reply settings and Gladys house availability.`,
+        );
+        throw error;
+      }
+      logger.info(`Sending ${decision} reply to FF-Agent.`);
+      const result = await sendReply(settings, decision, request);
+      const repliedAt = Date.now();
+      lastReply = {
+        response: result.response,
+        replied_at: repliedAt,
+        test: currentIncident?.test || false,
+      };
+      // Do not attach an in-flight reply to a different alarm received meanwhile.
+      if (currentIncident) {
+        currentIncident.response = result.response;
+      }
+      gladys.requestWidgetRefresh('incident');
+      return result;
+    } finally {
+      replying = false;
+    }
+  }
 
   gladys.onAction('simulate_incident', simulateIncident);
   for (const [key, decision] of Object.entries({
     accept_incident: 'accepted',
     decline_incident: 'declined',
   })) {
-    gladys.onSceneAction(key, () => respond(decision));
-    gladys.onAction(key, async () => {
-      const result = await respond(decision);
+    gladys.onSceneAction(key, async (fields) => {
+      try {
+        await respond(decision, fields);
+        return { success: true };
+      } catch {
+        // A timeout is not confirmation that FF-Agent did not process the request.
+        return { success: false };
+      }
+    });
+    gladys.onAction(key, async (fields) => {
+      const result = await respond(decision, fields);
       return RESPONSE_LABELS[result.response];
     });
   }
 
-  gladys.onWidgetGet('incident', () => ({
-    ttl_seconds: 10,
-    components: [
-      { type: 'text', variant: 'caption', text: REAL_RESPONSES },
-      {
-        type: 'text',
-        variant: 'body',
-        text: incident
-          ? `${incident.title}\n${incident.location}\nID: ${incident.incident_id}`
-          : {
-              en: 'No demo incident. Use “Simulate incident” in the integration configuration.',
-              fr: 'Aucune intervention fictive. Utilisez « Simuler » dans la configuration.',
-              de: 'Kein Übungseinsatz. In der Integrationskonfiguration „Einsatz simulieren“ wählen.',
-            },
-      },
-      ...(incident
-        ? [
-            {
-              type: 'status',
-              items: [
-                {
-                  label: { en: 'Response', fr: 'Réponse', de: 'Rückmeldung' },
-                  value: RESPONSE_LABELS[incident.response],
-                  color: 'warning',
+  gladys.onWidgetGet('incident', ({ language = 'en' } = {}) => {
+    const pending = incident?.response === 'pending';
+    const accepted = incident?.response === 'accepted';
+    const formatTime = (value) =>
+      `${new Intl.DateTimeFormat(language, {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+        timeZone: 'UTC',
+      }).format(new Date(value))} UTC`;
+    const items = [];
+    if (pending || accepted) {
+      items.push({
+        label: { en: 'Received', fr: 'Reçue le', de: 'Empfangen' },
+        value: formatTime(incident.received_at),
+        icon: 'bell',
+        color: pending ? 'danger' : 'neutral',
+      });
+    }
+    if (lastReply) {
+      if (!accepted) {
+        items.push({
+          label: pending
+            ? lastReply.test
+              ? { en: 'Previous test', fr: 'Test précédent', de: 'Zuvor (Test)' }
+              : { en: 'Previous reply', fr: 'Réponse avant', de: 'Zuvor' }
+            : lastReply.test
+              ? { en: 'Last test reply', fr: 'Dernier test', de: 'Letzter Test' }
+              : { en: 'Last reply', fr: 'Dernière réponse', de: 'Letzte Antwort' },
+          value: HISTORY_LABELS[lastReply.response],
+          icon:
+            lastReply.response === 'accepted'
+              ? 'check'
+              : lastReply.response === 'declined'
+                ? 'x'
+                : 'info',
+          color: lastReply.response === 'no_active_incident' ? 'info' : 'success',
+        });
+      }
+      items.push({
+        label: { en: 'Replied at', fr: 'Réponse à', de: 'Rückmeldung um' },
+        value: formatTime(lastReply.replied_at),
+        icon: 'clock',
+      });
+    }
+    return {
+      ttl_seconds: 10,
+      components: [
+        {
+          type: 'value',
+          value: pending
+            ? incident.test
+              ? { en: 'TEST ALARM', fr: 'TEST', de: 'TESTALARM' }
+              : { en: 'ALARM', fr: 'ALERTE', de: 'ALARM' }
+            : accepted
+              ? { en: 'Sent', fr: 'Envoyée', de: 'Gesendet' }
+              : { en: 'No alarm', fr: 'En veille', de: 'Kein Alarm' },
+          label: pending
+            ? { en: 'Reply needed', fr: 'Réponse attendue', de: 'Rückmeldung offen' }
+            : accepted
+              ? {
+                  en: 'Acceptance to FF-Agent',
+                  fr: 'Acceptation à FF-Agent',
+                  de: 'Zusage an FF-Agent',
+                }
+              : {
+                  en: 'No pending alarm',
+                  fr: 'Aucune alerte en attente',
+                  de: 'Kein offener Alarm',
                 },
-              ],
-            },
-            ...(incident.response === 'pending'
-              ? [
-                  {
-                    type: 'button',
-                    label: { en: 'Accept', fr: 'Accepter', de: 'Zusagen' },
-                    style: 'primary',
-                    action: {
-                      key: 'accept',
-                      params: { incident_id: incident.incident_id },
-                      confirm: true,
-                    },
-                  },
-                  {
-                    type: 'button',
-                    label: { en: 'Decline', fr: 'Refuser', de: 'Absagen' },
-                    style: 'danger',
-                    action: {
-                      key: 'decline',
-                      params: { incident_id: incident.incident_id },
-                      confirm: true,
-                    },
-                  },
-                ]
-              : []),
-          ]
-        : []),
-    ],
-  }));
+          icon: pending ? 'bell' : accepted ? 'check-circle' : 'bell-off',
+          color: pending ? 'danger' : accepted ? 'success' : 'neutral',
+        },
+        {
+          type: 'text',
+          variant: 'body',
+          text: pending
+            ? incident.test
+              ? {
+                  en: 'Test alarm. Accept or decline — both buttons send REAL replies to FF-Agent.',
+                  fr: 'Alerte de test. Accepter ou refuser envoie une VRAIE réponse à FF-Agent.',
+                  de: 'Testalarm. Zu- oder absagen — beide Buttons senden ECHTE Rückmeldungen an FF-Agent.',
+                }
+              : {
+                  en: 'Please accept or decline. Your reply is sent directly to FF-Agent.',
+                  fr: 'Acceptez ou refusez. Votre réponse est envoyée directement à FF-Agent.',
+                  de: 'Bitte zu- oder absagen. Deine Rückmeldung geht direkt an FF-Agent.',
+                }
+            : lastReply
+              ? lastReply.response === 'no_active_incident'
+                ? {
+                    en: 'Request successful (HTTP). FF-Agent reports no active incident.',
+                    fr: 'Requête réussie (HTTP). FF-Agent indique qu’aucune intervention n’est active.',
+                    de: 'Anfrage erfolgreich (HTTP). FF-Agent meldet aktuell keinen aktiven Einsatz.',
+                  }
+                : {
+                    en: 'Reply sent successfully (HTTP).',
+                    fr: 'Réponse envoyée avec succès (HTTP).',
+                    de: 'Rückmeldung erfolgreich gesendet (HTTP).',
+                  }
+              : {
+                  en: 'Incoming alarms appear here. No alarm received in this session yet.',
+                  fr: 'Les alertes reçues apparaissent ici. Aucune alerte reçue dans cette session.',
+                  de: 'Eingehende Alarmierungen erscheinen hier. In dieser Sitzung noch keinen Alarm empfangen.',
+                },
+        },
+        ...(items.length ? [{ type: 'status', items }] : []),
+        ...(accepted
+          ? [
+              {
+                type: 'button',
+                label: { en: 'End incident', fr: 'Terminer l’intervention', de: 'Einsatz beenden' },
+                icon: 'check-circle',
+                action: { key: 'finish', params: { incident_id: incident.incident_id } },
+              },
+              {
+                type: 'text',
+                variant: 'caption',
+                text: {
+                  en: 'Ending only resets this display.',
+                  fr: 'Clôture locale, sans envoi à FF-Agent.',
+                  de: 'Beenden setzt nur die Anzeige zurück.',
+                },
+              },
+            ]
+          : []),
+        ...(pending
+          ? [
+              {
+                type: 'button',
+                label: { en: 'Accept', fr: 'Accepter', de: 'Zusagen' },
+                icon: 'check',
+                style: 'primary',
+                action: {
+                  key: 'accept',
+                  params: { incident_id: incident.incident_id },
+                  confirm: true,
+                },
+              },
+              {
+                type: 'button',
+                label: { en: 'Decline', fr: 'Refuser', de: 'Absagen' },
+                icon: 'x',
+                style: 'primary',
+                action: {
+                  key: 'decline',
+                  params: { incident_id: incident.incident_id },
+                  confirm: true,
+                },
+              },
+            ]
+          : []),
+      ],
+    };
+  });
 
   gladys.onWidgetAction('incident', async (key, { incident_id }) => {
+    if (key === 'finish') {
+      if (!incident || incident_id !== incident.incident_id || incident.response !== 'accepted') {
+        throw localizedError({
+          en: 'This acceptance is no longer current. Refresh the widget.',
+          fr: 'Cette acceptation n’est plus actuelle. Actualisez le widget.',
+          de: 'Diese Zusage ist nicht mehr aktuell. Bitte das Widget aktualisieren.',
+        });
+      }
+      incident = null;
+      gladys.requestWidgetRefresh('incident');
+      return {
+        en: 'Display reset. No reply sent to FF-Agent.',
+        fr: 'Affichage réinitialisé. Aucune réponse envoyée à FF-Agent.',
+        de: 'Anzeige zurückgesetzt. Keine Rückmeldung an FF-Agent gesendet.',
+      };
+    }
     const decision = { accept: 'accepted', decline: 'declined' }[key];
     if (!decision) throw new Error('Unknown incident action');
     if (!incident || incident_id !== incident.incident_id || incident.response !== 'pending') {
-      throw new Error(
-        'Widget is outdated; refresh it. / Widget ist veraltet; bitte aktualisieren.',
-      );
+      throw localizedError({
+        en: 'This alarm is no longer open. Refresh the widget.',
+        fr: 'Cette alerte n’est plus en attente. Actualisez le widget.',
+        de: 'Dieser Alarm ist nicht mehr offen. Bitte das Widget aktualisieren.',
+      });
     }
     const result = await respond(decision);
     return RESPONSE_LABELS[result.response];
@@ -155,9 +328,9 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
     gladys.requestWidgetRefresh('incident');
     gladys
       .setConnectionStatus(true, {
-        en: 'HTTP response actions ready. FF-Agent confirmation has not been verified.',
-        fr: 'Actions HTTP disponibles. Confirmation FF-Agent non vérifiée.',
-        de: 'HTTP-Rückmeldeaktionen bereit. FF-Agent-Bestätigung noch nicht geprüft.',
+        en: 'Integration connected. Acceptances and rejections are sent directly to FF-Agent.',
+        fr: 'Intégration connectée. Les acceptations et les refus sont envoyés directement à FF-Agent.',
+        de: 'Integration verbunden. Zu- und Absagen werden direkt an FF-Agent gesendet.',
       })
       .catch((error) => {
         logger.error('Cannot report response action status to Gladys', error);

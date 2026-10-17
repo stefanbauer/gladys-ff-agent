@@ -1,30 +1,56 @@
+import { logger } from '@gladysassistant/integration-sdk';
+
+// Gladys forwards error.message to its localized action error display.
+export function localizedError(message) {
+  const error = new Error(message.en);
+  error.message = message;
+  return error;
+}
+
 // Personal reply links supplied by the user. Never log these URLs or follow redirects.
 export function getReplySettings(config, houses, decision) {
   const reply_uuid = (config.reply_uuid || '').trim();
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(reply_uuid)) {
-    throw new Error('Configure a reply UUID. / Rückmelde-UUID konfigurieren.');
+    throw localizedError({
+      en: 'Configure a reply UUID.',
+      fr: 'Configurez un UUID de réponse.',
+      de: 'Rückmelde-UUID konfigurieren.',
+    });
   }
   if (decision === 'declined') return { reply_uuid };
   const { transport = 'CAR', home_house } = config;
   if (!['CAR', 'BICYCLE', 'FEET'].includes(transport)) {
-    throw new Error('Invalid transport. / Ungültige Anreiseart.');
+    throw localizedError({
+      en: 'Invalid transport.',
+      fr: 'Moyen de transport invalide.',
+      de: 'Ungültige Anreiseart.',
+    });
   }
   const home = houses.find((house) => house.selector === home_house);
-  if (!home) throw new Error('Select your Gladys home. / Zuhause in Gladys auswählen.');
+  if (!home) {
+    throw localizedError({
+      en: 'Select your Gladys home.',
+      fr: 'Sélectionnez votre maison dans Gladys.',
+      de: 'Zuhause in Gladys auswählen.',
+    });
+  }
   if (
     !Number.isFinite(home.latitude) ||
     Math.abs(home.latitude) > 90 ||
     !Number.isFinite(home.longitude) ||
     Math.abs(home.longitude) > 180
   ) {
-    throw new Error('Set the house location in Gladys. / Hausstandort in Gladys hinterlegen.');
+    throw localizedError({
+      en: 'Set the house location in Gladys.',
+      fr: 'Renseignez la position de la maison dans Gladys.',
+      de: 'Hausstandort in Gladys hinterlegen.',
+    });
   }
   return {
     reply_uuid,
     transport,
     latitude: home.latitude,
     longitude: home.longitude,
-    house_name: home.name,
   };
 }
 
@@ -49,18 +75,38 @@ export async function sendReply(settings, decision, request = globalThis.fetch) 
     body = await response.text();
   } catch {
     // A timeout may happen after FF-Agent applied the response. Never retry automatically.
-    throw new Error(
-      'FF-Agent request not confirmed. Check FF-Agent before retrying. / FF-Agent-Anfrage nicht bestätigt. Vor erneutem Senden in FF-Agent prüfen.',
-    );
+    logger.warn(`Reply ${decision}: network outcome unconfirmed; no automatic retry.`);
+    throw localizedError({
+      en: 'FF-Agent request not confirmed. Check FF-Agent before retrying.',
+      fr: 'Requête FF-Agent non confirmée. Vérifiez FF-Agent avant de réessayer.',
+      de: 'FF-Agent-Anfrage nicht bestätigt. Vor erneutem Senden in FF-Agent prüfen.',
+    });
   }
   if (!response.ok) {
-    throw new Error(
-      `FF-Agent HTTP ${response.status}: response not confirmed; check FF-Agent before retrying. / Rückmeldung nicht bestätigt; vor erneutem Senden in FF-Agent prüfen.`,
-    );
+    logger.warn(`Reply ${decision}: HTTP ${response.status}; response not confirmed.`);
+    if (
+      response.status === 500 &&
+      body.trim() === 'Cannot update status of Person. Internal Error - Check URL!'
+    ) {
+      throw localizedError({
+        en: 'Check the reply UUID in the integration settings.',
+        fr: 'Vérifiez l’UUID de réponse dans la configuration.',
+        de: 'Bitte die Rückmelde-UUID in der Integrationskonfiguration prüfen.',
+      });
+    }
+    throw localizedError({
+      en: `FF-Agent HTTP ${response.status}: response not confirmed; check FF-Agent before retrying.`,
+      fr: `FF-Agent HTTP ${response.status} : réponse non confirmée ; vérifiez FF-Agent avant de réessayer.`,
+      de: `FF-Agent HTTP ${response.status}: Rückmeldung nicht bestätigt; vor erneutem Senden in FF-Agent prüfen.`,
+    });
   }
   if (body.trim() === 'Updated MissionStatus: kein passender Einsatz aktiv') {
-    return { response: 'no_active_incident', confirmed: false, http_status: response.status };
+    logger.info(`Reply ${decision}: HTTP ${response.status}; no active incident.`);
+    return { response: 'no_active_incident' };
   }
   // A 2xx only confirms HTTP delivery, not the person's actual mission response.
-  return { response: decision, confirmed: false, http_status: response.status };
+  logger.info(
+    `Reply ${decision}: HTTP ${response.status}; delivered, operational response unconfirmed.`,
+  );
+  return { response: decision };
 }

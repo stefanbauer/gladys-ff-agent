@@ -6,23 +6,53 @@ und des offiziellen SDK 0.15.0. Keine Änderungen am Gladys-Kern erforderlich.
 
 > **Rückmeldeaktionen senden echt an FF-Agent.** Kein Simulationsmodus für Zu-/Absagen.
 > HTTP-Erfolg ist noch keine bestätigte Einsatzrückmeldung; die FF-Agent-Antwortsemantik
-> muss praktisch geprüft werden. Der Empfang echter Alarme fehlt noch. „Einsatz simulieren“
+> muss praktisch geprüft werden. „Einsatz simulieren“
 > erzeugt Testdaten, kann aber Szenen mit echten Rückmeldeaktionen auslösen.
+
+**Zu- und Absagen benötigen weder Gladys Plus noch einen Open-API-Key.** Plus samt
+Key wird nur für echte eingehende FF-Agent-Alarme über den Webhook benötigt, die
+den Szenentrigger auslösen. „Einsatz simulieren“ löst denselben Trigger lokal ohne Plus/Key aus.
 
 ## Was bereits funktioniert
 
+- Native Plus-Webhooks empfangen ein datensparsames Alarmsignal (`POST`, JSON `{}`).
+  Die native Karte **Gladys-Plus-Webhooks** zeigt die aktuelle URL.
 - „Einsatz simulieren“ in der Integrationskonfiguration publiziert den Trigger
-  `incident_received` mit ID, Stichwort, Kategorie, Ort, Zeitpunkt und `simulated: true`.
+  `incident_received` ausschließlich mit `received_at`: dem lokal erzeugten Empfangszeitpunkt.
+  Aus Datenschutzgründen gibt es keine Einsatzdaten und keinen Kategorie-Filter.
 - Die Aktionen `accept_incident` und `decline_incident` senden HTTP-GET-Anfragen
   an die persönlichen FF-Agent-Rückmeldelinks. Keine zusätzliche Einsatz-ID nötig,
   auch kein zuvor empfangener oder simulierter Alarm.
-- Das Widget **FF-Agent Einsatz** zeigt den letzten Übungseinsatz mit bestätigungspflichtigen
-  Zu-/Absagebuttons. Veraltete Widget-Klicks werden abgewiesen.
+- Das Widget **FF-Agent Einsatz** zeigt offene Alarme mit bestätigungspflichtigen
+  Zu-/Absagebuttons, eine manuell beendbare Zusageanzeige und die letzte Rückmeldung.
+  Veraltete und gleichzeitig ausgelöste Rückmeldeklicks werden abgewiesen.
 - Dieselben Rückmeldeoperationen stehen als Konfigurationsbuttons bereit.
 - Sichtbares, bearbeitbares UUID-Feld, Anreise-Dropdown und native Gladys-Hausauswahl.
-  „Rückmeldekonfiguration prüfen“ liest die Koordinaten des gewählten Hauses, ohne
-  FF-Agent aufzurufen oder UUID/Koordinaten im Ergebnis auszugeben.
+  Jede Zu-/Absage prüft ihre benötigten Einstellungen vor dem echten FF-Agent-Aufruf.
 - Englische, französische und deutsche Beschriftungen und Nutzerdokumentation.
+
+### Widget-Zustände
+
+- **Ruhe:** „Kein Alarm“ bedeutet kein offener, lokal empfangener Alarm – nicht,
+  dass FF-Agent geprüft wurde oder die Alarmverbindung funktioniert.
+- **Alarm:** roter Alarmstatus, Empfangszeit und Zu-/Absagebuttons. Unbeantwortete
+  Alarme bleiben offen. Testalarme sind erkennbar; ihre Rückmeldungen senden echt.
+- **Zusage gesendet:** nach HTTP-Erfolg grüne Anzeige bis „Einsatz beenden“ gedrückt
+  wird. Danach wieder Ruhe mit letzter Rückmeldung und Zeitpunkt.
+- **Absage gesendet:** nach HTTP-Erfolg sofort Ruhe; letzte Rückmeldung bleibt sichtbar.
+- **Kein aktiver Einsatz:** meldet FF-Agent dies ausdrücklich, sofort Ruhe statt
+  einer vermeintlichen Zusage. Die letzte Antwort bleibt sichtbar.
+- **Fehler/Timeout:** Alarm nicht ausblenden, keine erfolgreiche Rückmeldung merken.
+  Vor Wiederholung in FF-Agent prüfen; keine automatische Wiederholung.
+
+Die Anzeige bestätigt nur HTTP-Zustellung, keine operative Einsatzrückmeldung.
+„Einsatz beenden“ setzt nur die lokale Anzeige zurück und sendet nichts an FF-Agent. Die
+Anzeige aktualisiert sich regulär alle zehn Sekunden; Browserpause oder fehlende
+Verbindung können sie verzögern. Ein neuer Alarm ersetzt den offenen Zustand,
+auch während der Zusageanzeige; alte laufende Anfragen dürfen ihn nicht quittieren.
+Die letzte erfolgreiche Anfrage bleibt bis zur nächsten erhalten, auch ohne
+vorherigen Alarm bei Szenen-/Konfigurationsaktionen. Empfang und Rückmeldung
+bleiben nur im Arbeitsspeicher; Neustart löscht beide. Zeitangaben sind in UTC.
 
 ## Lokal entwickeln
 
@@ -96,6 +126,26 @@ Dienststatus RUNNING; davor kann ein Verbindungs-Timeout angezeigt werden.
 Der Verbindungsbadge signalisiert die Bereitschaft der HTTP-Aktionen, nicht eine
 geprüfte FF-Agent-Anmeldung oder eine bestätigte Rückmeldung.
 
+### Überwachung und Protokolle
+
+„Starten“ in Gladys steuert den Docker-Container und startet einen laufenden
+Container erneut. Der Button ist auch bei RUNNING sichtbar; er ist dann nicht
+nötig. Im lokalen Entwicklungsmodus startet er **nicht** den Node-Prozess auf
+dem Mac: dafür weiterhin `npm run dev` verwenden.
+
+Die Integration protokolliert Alarmempfang, Testalarme, Übergabe des Ereignisses
+an Gladys sowie Zu-/Absageanfragen mit HTTP-Status oder unbestätigtem Netzwerkergebnis.
+Fehlende Einstellungen werden vor dem Senden gemeldet. Die technischen Logs sind
+auf Englisch und enthalten Zeitstempel, aber keine UUIDs, Koordinaten, Schlüssel,
+URLs, Webhookinhalte oder rohen FF-Agent-Antworten. UI-Rückmeldefehler werden
+getrennt nach Gladys-Sprache angezeigt (Deutsch, Englisch oder Französisch).
+
+Lokal stehen die Logs im Terminal von `npm run dev`. Der Gladys-Bereich „Protokolle“
+liest nur Docker-Ausgaben und bleibt beim inaktiven Registrierungscontainer leer.
+Beim normalen Produktionsimage läuft Node im Container; dieselben Logs erscheinen
+dort nach dem Aktualisieren in Gladys. Ein Empfangslog bestätigt weder die Ausführung
+aller Szenen noch eine operative Einsatzrückmeldung.
+
 ### Mehrere Integrationen parallel
 
 Gladys nur einmal starten. Jede weitere Integration bekommt ein eigenes Repository,
@@ -115,37 +165,55 @@ Frontend- oder Backend-Instanzen und für diesen SDK-Betrieb keine weiteren Port
    und warnt, dass Rückmeldebuttons echte Anfragen senden.
 4. „Zusagen“ oder „Absagen“ nur wählen, wenn wirklich eine FF-Agent-Rückmeldung
    angefragt werden soll. Danach in FF-Agent prüfen, ob sie übernommen wurde.
-5. Für Szenen: Trigger **Einsatz eingegangen** auswählen; Kategorie leer lassen
-   oder `exercise` filtern. Die Rückmeldeaktionen benötigen keine Felder.
+5. Für Szenen: Trigger **Einsatz eingegangen** auswählen; es gibt keinen Filter.
+   Zusagen können optional eine Anreiseart festlegen; Absagen benötigen keine Felder.
 
-`npm run dev` lädt Codeänderungen automatisch neu; dabei geht der simulierte Einsatz verloren.
+`npm run dev` lädt Codeänderungen automatisch neu; dabei geht der letzte Alarm verloren.
 Ohne Hot Reload genügt `npm start`. Gladys selbst läuft separat weiter.
 
 ### Rückmeldekonfiguration
 
 Die Rückmelde-UUID wird als normales Gladys-Textfeld gespeichert und bleibt beim
-Bearbeiten sichtbar. Keine reale UUID committen oder in Logs ausgeben. Sie stammt aus der Form
-`https://www.ff-agent.com/app2/missionreplies/<UUID>/accept` bzw. `/reject`.
+Bearbeiten sichtbar. Keine reale UUID committen oder in Logs ausgeben.
+In FF-Agent unter **Persönliches Profil → „Weblinks für Einsatzmeldung“** findest du
+die Links. Beispiel mit unkenntlicher UUID:
+`https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept`.
+Nur die eigene UUID anstelle der x zwischen `/missionreplies/` und `/accept` bzw.
+`/reject` kopieren, nicht die gesamte URL oder Parameter wie `?transport=CAR`.
 Nur die eingegebene UUID wird gespeichert; der Link wird daraus bei einer Aktion
 erzeugt. Laut Nutzer benötigen Zu-/Absagen keine zusätzliche Einsatz-ID.
 
 Anreiseart: Auto (`CAR`), Fahrrad (`BICYCLE`), zu Fuß (`FEET`), gemäß Nutzerangaben.
+Bei einer Zusage kann die Anreiseart optional in der Szenenaktion oder beim
+Konfigurationsbutton überschrieben werden. Leer bedeutet: Standard aus der
+Konfiguration. Die Überschreibung gilt nur für diesen Aufruf, nicht für spätere
+Zusagen. Widget-Buttons verwenden den konfigurierten Standard.
 „Zuhause in Gladys“ ist eine native Hausauswahl. Latitude/Longitude kommen über das
 SDK aus dem **gewählten** Haus, nicht aus einem eigenen Koordinatenformular und nicht
 aus dem ersten Haus der Liste. Deshalb fordert das Manifest `location: true` an.
-Bei fehlendem Standort scheitert die Konfigurationsprüfung verständlich.
+Bei fehlendem Standort wird eine Zusage vor dem Versand mit einer Fehlermeldung abgebrochen.
 Eine Absage verwendet nur die UUID; Anreiseart und Hauskoordinaten sind dafür nicht nötig.
 
 Es gelten fünf Sekunden HTTP-Timeout, keine automatischen Wiederholungen und keine
 Weiterleitungen. Bei Timeout oder HTTP-Fehler ist unklar, ob FF-Agent die Rückmeldung
-bereits verarbeitet hat: vor erneutem Senden dort prüfen. Ein HTTP-2xx-Ergebnis liefert
-`response`, `confirmed: false` und `http_status` als Szenenausgaben. Es behauptet keine
-fachlich bestätigte Zu-/Absage. Automatisierte Tests verwenden ausschließlich HTTP-Doubles.
+bereits verarbeitet hat: vor erneutem Senden dort prüfen. Beide Szenenaktionen liefern
+nur `success` (Anfrage erfolgreich): `true` bei HTTP 2xx, auch wenn gerade kein Einsatz
+aktiv ist; `false` bei ungültiger Konfiguration, HTTP-Fehler oder unbestätigter Übertragung.
+Die Szene kann diesen Wert in Folgeschritten auswerten und läuft auch bei `false` weiter.
+Dies ist keine fachliche Bestätigung einer Zu-/Absage. Bei Timeout kann FF-Agent die
+Anfrage dennoch verarbeitet haben; `false` ist keine sichere Ablehnung und darf keine
+automatischen Wiederholungen auslösen. Konfigurations- und Widget-Buttons zeigen
+weiterhin detaillierte Meldungen bzw. Fehler. Automatisierte Tests verwenden nur HTTP-Doubles.
 
-### Alarmeingang: Plus später, REST lokal
+### Alarmeingang: Plus öffentlich, REST lokal
 
-Vorgesehen ist FF-Agent → Gladys Plus → externer Integrationswebhook → Szenentrigger.
-Der Nutzer erzeugt dazu einen Plus-Open-API-Key. Die vom Gladys-Kern erzeugte URL-Form ist:
+FF-Agent → Gladys Plus → nativer Integrationswebhook `incident` → Szenentrigger.
+Die gewünschte Instanz muss mit Plus verbunden sein. Unter Plus → Einstellungen →
+Open API einen Key erzeugen und in Gladys im nativen Bereich **Webhooks** dieser
+Integration speichern. Keine eigene Schlüsselverwaltung in der Integration.
+Die native Webhooks-Karte zeigt die vom Gladys-Kern erzeugte URL samt Schlüssel,
+auch nach Schlüsselwechsel. Ein zusätzlicher URL-Aktionsbutton ist nicht nötig.
+Die URL-Form ist:
 
 ```text
 https://api.gladysgateway.com/v1/api/external-integration/<OPEN_API_KEY>/<SELECTOR>/<WEBHOOK_KEY>
@@ -153,10 +221,25 @@ https://api.gladysgateway.com/v1/api/external-integration/<OPEN_API_KEY>/<SELECT
 
 Das ist **nicht** der `/device/state`-Endpunkt des älteren Open-API-Tutorials:
 der nimmt Sensorwerte entgegen, keine beliebigen Einsatz-JSONs.
-Erst nach Festlegung des Payloads einen Webhook im Manifest deklarieren und per
-SDK `onWebhook` anbinden. Zurzeit ist bewusst noch keiner registriert.
-Die Konfigurationsseite erklärt bereits die FF-Agent-Formularfelder und den späteren
-nativen URL-Bereich. Die ausführliche [Einrichtungsanleitung](docs/de.md) enthält die Zuordnung.
+In FF-Agent einen generischen Webhook mit **POST**, **HTTPS** und **JSON-Body `{}`**
+eintragen. Bei separater Protokollauswahl `https://` von der URL entfernen.
+Keine Basis-Authentifizierung und keine zusätzlichen Header; JSON setzt den Content-Type.
+Die URL enthält den Plus-Key: privat halten, bei Offenlegung den Key widerrufen/ersetzen
+und die neue URL in FF-Agent eintragen. Niemals den persönlichen Rückmeldelink nutzen.
+
+FF-Agent liefert aus Datenschutzgründen keine Einsatzdetails. Es genügt nur
+ein Alarmsignal, ohne ID, Stichwort, Kategorie, Ort oder FF-Agent-Zeitstempel.
+Die Integration erzeugt `received_at` auf dem Gladys-System selbst (UTC/ISO 8601).
+Auch Testalarme geben nur dieses Feld weiter; es gibt keine Simulationsvariable.
+Der Handler ignoriert den Body vollständig und verarbeitet nur POST als Alarmsignal;
+GET löst keinen Alarm aus. Der Modus `fire_and_forget` bestätigt sofort, unabhängig
+von der Szenenausführung. **HTTP 200 allein beweist keinen Alarmempfang:** gestoppte
+Integrationen oder Verbindungsprobleme können ebenfalls 200 ergeben und Signale verlieren.
+Vor echtem Einsatz daher einen Test aus FF-Agent senden und Trigger/Widget in Gladys prüfen.
+Jeder zugestellte POST zählt als Alarm; ohne Ereignis-ID sind Wiederholungen nicht
+zuverlässig unterscheidbar. Keine garantierte Zustellung, Persistenz oder Replay-Erkennung;
+dies ersetzt keine offizielle Alarmierung.
+Die ausführliche [Einrichtungsanleitung](docs/de.md) enthält die Formularzuordnung.
 
 Für lokale Tests ohne Plus ist bereits die normale, authentifizierte Aktions-API nutzbar:
 
@@ -167,10 +250,9 @@ curl -X POST http://localhost:1443/api/v1/external_integration/ext-dev-ff-agent/
   --data '{"fields":{}}'
 ```
 
-Sie erzeugt einen synthetischen Einsatz über denselben Handler wie der Konfigurationsbutton.
+Sie erzeugt einen Testalarm über denselben Empfangspfad wie der Plus-Webhook.
 Der Access-Token stammt aus der lokalen Benutzeranmeldung, **nicht** aus Plus oder
-der Integrationstoken-`.env`. Der spätere lokale JSON-Testeingang kann eine deklarierte
-Aktion verwenden und denselben Payload-Parser wie der Plus-Webhook aufrufen.
+der Integrationstoken-`.env`.
 Gladys 5.2.1 hat keinen äquivalenten lokalen Webhook-POST-Endpunkt. Die produktive,
 bereits mit Plus verbundene Gladys-Instanz wird für diese Entwicklung nicht umgekoppelt.
 
@@ -192,11 +274,10 @@ Beim Container-Test **nicht** gleichzeitig einen lokalen SDK-Prozess für densel
 
 ## Nächster Entwicklungsschritt
 
-Als Nächstes: Alarm-JSON und FF-Agent-Platzhalter samt Escapierung klären sowie die
-tatsächliche Zu-/Absagebestätigung prüfen. Keine Bestätigungsstatuscodes raten.
-Der HTTP-Transport liegt bereits in `src/ff-agent.js`; den Alarmeingang separat
-implementieren, inklusive Replay-Erkennung, Ablaufzeiten und sicherer Persistenz.
-Die Gladys-Handler und stabilen Manifest-Schlüssel bleiben die Schnittstelle.
+Als Nächstes: echte Ende-zu-Ende-Zustellung FF-Agent → Plus → Gladys auf der
+gewünschten Plus-Instanz prüfen sowie die tatsächliche Zu-/Absagebestätigung klären.
+Keine Bestätigungsstatuscodes raten. Ohne Ereignis-ID ist Replay-Erkennung nicht
+zuverlässig möglich. Alarmzustand bleibt derzeit ausschließlich im Arbeitsspeicher.
 
 Derzeit keine lokalen HTTP-Webhookports, keine zusätzlichen Geräte und kein Gladys-Plus-Zwang.
 Die dokumentierten Gladys-Webhooks laufen über Gladys Plus; sie sind nicht automatisch

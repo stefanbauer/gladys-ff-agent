@@ -1,9 +1,12 @@
 # FF-Agent for Gladys Assistant
 
 This external provider integration targets Gladys Assistant 5.2.1 or newer.
-**Accept/reject actions send real HTTP requests to FF-Agent.** Incoming alarms
-are not implemented yet. HTTP success does not prove FF-Agent recorded the mission
+**Accept/reject actions send real HTTP requests to FF-Agent.** HTTP success does not prove FF-Agent recorded the mission
 response; check it there. This does not replace official alarm systems.
+
+Acceptances and rejections require neither Gladys Plus nor an Open API key.
+Plus and its key are only needed for real incoming FF-Agent alarms via webhook.
+Local simulation triggers scenes without Plus or a key.
 
 ## Configuration and use
 
@@ -14,41 +17,85 @@ buttons. Widget buttons require confirmation and send real requests, even for a 
 alarm. **Test scenes can also send real responses.** Configuration and scene actions
 need no additional incident ID and no prior alarm.
 
+Find the reply UUID in **FF-Agent → Personal profile → “Weblinks für Einsatzmeldung”**.
+Example: `https://www.ff-agent.com/app2/missionreplies/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/accept`.
+Copy only your UUID in place of the x characters, between `/missionreplies/` and
+`/accept` or `/reject`, not the full URL or parameters such as `?transport=CAR`.
 The reply UUID stays visible and editable. Acceptance also requires transport
 (CAR/BICYCLE/FEET) and a native Gladys house selection. Rejection only needs the UUID.
+Acceptance actions optionally override transport for that request only; leave the
+field empty to use the configured default. The saved configuration is not changed.
+This applies to scene and configuration actions; widget buttons use the default.
 Coordinates come from the selected Gladys house, requiring
-the declared location permission. **Check reply settings** validates these values
-without contacting FF-Agent or displaying the UUID or coordinates. Simulation
+the declared location permission. Reply actions validate their required settings
+before sending a real request and then check the HTTP response. No separate settings check is needed. Simulation
 does not require these settings. Never share personal reply links.
 
-## Prepare the FF-Agent generic webhook
+## Set up the FF-Agent generic webhook
 
-The configuration page explains the FF-Agent form directly. Do not enable delivery
-yet: reception and the final JSON payload are not implemented. Prepare POST, HTTPS,
-no Basic authentication, no additional headers, and JSON format (FF-Agent sets
-Content-Type automatically). Once reception is implemented, use Gladys' native
-Webhooks section to save the Plus Open API key and obtain the complete URL. Omit
-`https://` from FF-Agent's URL field if its protocol dropdown already supplies it.
-The URL is secret; never use a personal accept/reject link as the alarm endpoint.
+Connect the intended instance to Gladys Plus. Create a key under Plus → Settings →
+Open API and save it in this integration's native **Webhooks** section in Gladys.
+The native **Gladys Plus Webhooks** card shows the current complete URL including
+the key. Paste it into FF-Agent’s **Generic webhook** form: **POST**, **HTTPS**, **JSON**, and body
+**`{}`**. No Basic authentication or additional headers; FF-Agent sets Content-Type.
+Omit `https://` from the URL if FF-Agent's protocol dropdown supplies it separately.
+The URL is secret; never use a personal reply link as the alarm endpoint. After key
+rotation, retrieve the new URL and replace it in FF-Agent.
 
-The body needs confirmed FF-Agent incident variables and JSON escaping, not guessed
-placeholders. Connection and processing each have a five-second timeout according
-to the FF-Agent form. Test delivery before operational use. FF-Agent cannot reach
-this Mac through localhost: local authenticated REST simulation is separate from
-the eventual Plus delivery test. Do not change the existing production Plus link.
+For privacy, FF-Agent supplies no incident details: only an alarm signal is needed.
+Do not send incident IDs, titles, categories, locations or timestamps. The handler
+ignores the body and processes POST only. Gladys acknowledges immediately using
+`fire_and_forget`, without waiting for scenes. **HTTP 200 is not proof of reception:**
+disconnected/stopped integrations can lose signals. Send a test from FF-Agent and
+check the widget/scene trigger in Gladys before operational use. Every delivered POST
+counts as an alarm; without event IDs, reliable deduplication is impossible.
+Connection and processing each have a five-second timeout according to the FF-Agent
+form. Local authenticated REST simulation uses the same reception path, but does not
+test FF-Agent → Plus delivery. FF-Agent cannot reach this Mac through localhost.
+Do not change the existing production Plus link.
 
-The scene trigger **Incident received** exposes `incident_id`, `title`, `category`,
-`location`, `received_at`, and `simulated`. The optional category filter matches
-`exercise` for test alarms. **Accept incident** and **Decline incident** need no
-fields. Their outputs are `response`, `http_status` and `confirmed: false`; the
-trigger's `simulated` flag describes the alarm only. Requests time out after five
-seconds with no automatic retries or redirects. Check FF-Agent before retrying
-an uncertain result.
+The scene trigger **Incident received** has no filters and exposes only `received_at`,
+generated locally on the Gladys system (UTC/ISO 8601), not supplied by FF-Agent.
+Test alarms use the same minimal data; no simulation flag or incident details are
+passed to scenes. The widget labels tests and shows only the local reception time.
+Both reply scene actions output only `success`: true for HTTP 2xx (also when no
+incident is active), false for invalid settings, HTTP errors or an unconfirmed request.
+Scenes continue after a false result so subsequent steps can evaluate it. This is
+HTTP success, not proof of an operational response. A timeout may occur after FF-Agent
+processed the request, so false must not trigger automatic retries. Configuration
+and widget buttons still display detailed messages/errors. Requests time out after
+five seconds with no automatic retries or redirects.
 
 ## Limitations and troubleshooting
 
-Only the latest synthetic incident is held in memory; restarting clears it.
+Only the latest alarm is held in memory; restarting clears it.
 Docker Desktop and Node 24 are required for the documented local setup. Keep the
 registration container running and use only one active SDK process per selector.
 `npm run dev` synchronizes registration and the integration token automatically. Never commit
 tokens or actual incident data. See the repository README for setup and logs.
+
+## Widget: alarms and replies
+
+“No alarm” means no open alarm received locally, not verification of FF-Agent or
+the alarm connection. An alarm shows a red state, reception time and confirmation
+buttons for acceptance/rejection. Test alarms are clearly marked.
+After a successful HTTP acceptance, “Sent” remains until “End incident” is pressed,
+then idle returns with the last reply and reply time. A successful
+HTTP rejection or explicit no-active-incident response returns idle immediately.
+Errors/timeouts keep alarms open; never retry automatically. New alarms interrupt
+acceptance displays; stale/concurrent clicks cannot dismiss them. Scene/configuration
+actions update the same history. None of this proves an operational mission reply.
+“End incident” only resets the display and sends nothing to FF-Agent.
+The display refreshes normally every ten seconds; browser
+suspension or connection failures may delay the display. Times are UTC. Only the last
+alarm and successful request remain in memory; a restart clears both.
+
+**Supervision → Start** starts/restarts the Docker container, even when already
+running. It is unnecessary while connected and does not start the local Mac Node
+process; use `npm run dev` for that. **Logs** reads Docker output only: during local
+development see the `npm run dev` terminal; the idle registration container has no
+application logs. With the production image, refresh Logs in Gladys to see them.
+Technical logs are in English and describe alarm/test reception, event publication,
+reply attempts, HTTP status and failures. They never contain UUIDs, coordinates,
+keys, URLs, webhook bodies or raw provider responses. Reception does not prove scene
+execution or an operational reply. UI reply errors follow the selected Gladys language.
