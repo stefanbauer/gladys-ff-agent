@@ -1,47 +1,42 @@
-# -----------------------------------------------------------------------------
-# Cut a new release — entirely from the GitHub UI, no local tooling needed.
-#
-# In GitHub: Actions -> Release -> "Run workflow" -> pick patch / minor / major.
-#
-# What it does, in one run:
-#   1. computes the next semver from `package.json` (npm version rules);
-#   2. writes it into `package.json`, `package-lock.json` AND the manifest
-#      (`gladys-assistant-integration.json`: both `version` and the
-#      `docker_image` tag, so the indexer and the image stay in lockstep —
-#      with the sub-containers that run that same image);
-#   3. moves the `## [Unreleased]` section of `CHANGELOG.md` under the version;
-#   4. commits the bump and pushes the `vX.Y.Z` tag;
-#   5. calls build.yml to publish the multi-arch image (`:X.Y.Z` + `:latest`);
-#   6. calls github-release.yml to publish the GitHub Release of the tag.
-#
-# Why call build.yml and github-release.yml instead of relying on the tag push:
-# a tag pushed with the default GITHUB_TOKEN does NOT trigger other workflows,
-# so we invoke them ourselves. No personal access token to create.
-# -----------------------------------------------------------------------------
 name: Release
 
 on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       release-type:
-        description: 'Version bump for this release'
+        description: 'initial keeps the current version; otherwise choose a version bump'
         required: true
         type: choice
         default: patch
         options:
+          - initial
           - patch
           - minor
           - major
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  # Tags pushed with GITHUB_TOKEN do not trigger another workflow. Both manual
+  # releases and hand-pushed tags therefore continue through the jobs below.
   prepare:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # commit the version bump and push the tag
+      contents: write
     outputs:
-      version: ${{ steps.bump.outputs.version }}
+      version: ${{ steps.prepare.outputs.version }}
+      commit: ${{ steps.publish.outputs.commit }}
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -51,65 +46,116 @@ jobs:
         with:
           node-version: 24
 
-      - name: Bump version, update the manifest and the changelog
-        id: bump
+      - name: Prepare version and changelog
+        id: prepare
         env:
           RELEASE_TYPE: ${{ inputs.release-type }}
         run: |
           set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Run releases from main."
+            exit 1
+          fi
 
-          # npm computes the next semver and writes it to package.json (and
-          # package-lock.json). --no-git-tag-version: we own the commit + tag
-          # below, so npm must not touch git.
-          new_version="$(npm version "$RELEASE_TYPE" --no-git-tag-version | tail -n1)"
-          new_version="${new_version#v}" # v1.2.0 -> 1.2.0
+          if [ "$RELEASE_TYPE" = "initial" ]; then
+            if [ -n "$(git tag --list '[0-9]*')" ]; then
+              echo "::error::initial is only available before the first version tag."
+              exit 1
+            fi
+            version="$(node -p "require('./package.json').version")"
+          else
+            version="$(npm version "$RELEASE_TYPE" --no-git-tag-version | tail -n1)"
+            # npm prints a leading v; our Git tags use the bare version.
+            version="${version#v}"
+          fi
+          if git show-ref --verify --quiet "refs/tags/${version}"; then
+            echo "::error::Version tag already exists; never overwrite a release."
+            exit 1
+          fi
 
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:${new_version}"
-
-          # Keep the manifest in lockstep: the version the indexer reads AND the
-          # image tag Gladys pulls must both point at this release. The script
-          # rewrites those two values in place (re-printing the file with jq
-          # would break the Prettier layout, and the CI format check with it),
-          # and moves the [Unreleased] changes of CHANGELOG.md under the version.
-          node .github/scripts/release.mjs prepare "$new_version" "$image" \
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${version}"
+          node .github/scripts/release.mjs prepare "$version" "$image" \
             "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          node .github/scripts/release.mjs check "$version" "$image"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
-          echo "version=${new_version}" >> "$GITHUB_OUTPUT"
-
-      # Note: if the branch you release from is protected against direct pushes,
-      # GitHub rejects the push below (the default GITHUB_TOKEN cannot bypass
-      # branch protection). Allow GitHub Actions to bypass the rule, or release
-      # from an unprotected branch.
-      - name: Commit, tag and push
+      - name: Commit, tag and push atomically
+        id: publish
         env:
-          VERSION: ${{ steps.bump.outputs.version }}
+          VERSION: ${{ steps.prepare.outputs.version }}
         run: |
           set -euo pipefail
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add package.json package-lock.json gladys-assistant-integration.json
-          if [ -f CHANGELOG.md ]; then git add CHANGELOG.md; fi
+          git add package.json package-lock.json gladys-assistant-integration.json CHANGELOG.md
           git commit -m "chore(release): ${VERSION}"
-          git tag -a "v${VERSION}" -m "Release ${VERSION}"
+          git tag -a "$VERSION" -m "Release ${VERSION}"
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/${VERSION}"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          git push origin "v${VERSION}"
-
-  # Build and publish the image for the version we just tagged.
-  build:
+  candidate:
     needs: prepare
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.candidate.outputs.version }}
+      commit: ${{ steps.candidate.outputs.commit }}
+    steps:
+      - name: Checkout release candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Check tag and release metadata
+        id: candidate
+        env:
+          PREPARED_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="${PREPARED_VERSION:-$GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release tags must be X.Y.Z without a prefix (stable versions only)."
+            exit 1
+          fi
+          git merge-base --is-ancestor HEAD origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${tag}^{commit}")"
+          version="$tag"
+          node .github/scripts/release.mjs check "$version" \
+            "ghcr.io/${GITHUB_REPOSITORY,,}:${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  checks:
+    needs: candidate
+    if: ${{ !cancelled() && needs.candidate.result == 'success' }}
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.candidate.outputs.commit }}
+
+  build:
+    needs: [candidate, checks]
+    if: ${{ !cancelled() && needs.candidate.result == 'success' && needs.checks.result == 'success' }}
     uses: ./.github/workflows/build.yml
     permissions:
       contents: read
       packages: write
     with:
-      version: ${{ needs.prepare.outputs.version }}
+      version: ${{ needs.candidate.outputs.version }}
+      ref: ${{ needs.candidate.outputs.commit }}
 
-  # Publish the GitHub Release of the new tag, once its image exists: the
-  # Gladys Supervision page links each version to the repository's releases.
   github-release:
-    needs: build
+    needs: [candidate, build]
+    if: ${{ !cancelled() && needs.candidate.result == 'success' && needs.build.result == 'success' }}
     uses: ./.github/workflows/github-release.yml
     permissions:
       contents: write
+    with:
+      version: ${{ needs.candidate.outputs.version }}
+      ref: ${{ needs.candidate.outputs.commit }}

@@ -8,8 +8,7 @@
 #   3. Tests     -> `node --test`, the built-in runner (no extra dependency).
 #
 # They run on Node 24 (also used by the Docker image). The image is built too
-# (amd64 only, never pushed), so a broken Dockerfile shows up here rather than
-# in a release.
+# (amd64 only, never pushed), then tested offline under sandbox constraints.
 #
 # The store validator (`npx github:GladysAssistant/integration-store .`) is not
 # a gate here: it also checks that the manifest's `docker_image` exists on its
@@ -22,6 +21,12 @@ on:
     branches:
       - main
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Exact release commit to check'
+        required: true
+        type: string
 
 # Checks only read the code: no write scope for the token, whatever the
 # repository default is.
@@ -40,6 +45,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false # no git push here
 
       - name: Set up Node.js
@@ -67,6 +73,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false # no git push here
 
       - name: Set up Docker Buildx
@@ -80,3 +87,13 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          load: true
+          tags: gladys-ff-agent-ci:check
+
+      - name: Test production image offline in the sandbox
+        run: |
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --memory 256m --cpus 0.5 --pids-limit 100 \
+            --mount "type=bind,src=$PWD/test,dst=/app/test,readonly" \
+            gladys-ff-agent-ci:check node --test test/app.test.js

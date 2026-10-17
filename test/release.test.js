@@ -7,7 +7,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as prettier from 'prettier';
 import { bumpManifest, releaseNotes, rollChangelog } from '../.github/scripts/release.mjs';
@@ -123,8 +126,8 @@ test('rollChangelog moves Unreleased under the version, first release', () => {
 
 - Thing.
 
-[Unreleased]: ${REPO}/compare/v1.0.1...HEAD
-[1.0.1]: ${REPO}/releases/tag/v1.0.1
+[Unreleased]: ${REPO}/compare/1.0.1...HEAD
+[1.0.1]: ${REPO}/releases/tag/1.0.1
 `,
   );
 });
@@ -154,8 +157,8 @@ test('rollChangelog compares with the previous version, links or not', () => {
 
 - Thing.
 
-[Unreleased]: ${REPO}/compare/v1.0.2...HEAD
-[1.0.2]: ${REPO}/compare/v1.0.1...v1.0.2
+[Unreleased]: ${REPO}/compare/1.0.2...HEAD
+[1.0.2]: ${REPO}/compare/1.0.1...1.0.2
 `,
   );
 });
@@ -190,10 +193,75 @@ test('releaseNotes returns the section of a version', () => {
 
 - Thing.
 
-[Unreleased]: ${REPO}/compare/v1.0.2...HEAD
+[Unreleased]: ${REPO}/compare/1.0.2...HEAD
 `;
   assert.equal(releaseNotes(text, '1.0.2'), '### Fixed\n\n- Fix.');
   assert.equal(releaseNotes(text, '1.0.1'), '- Thing.');
   assert.equal(releaseNotes(text, '1.0.0'), '');
   assert.equal(releaseNotes(text, '1.0'), '');
+});
+
+test('release CLI prepares the initial version and checks all published version metadata', async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), 'ff-agent-release-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const script = fileURLToPath(new URL('../.github/scripts/release.mjs', import.meta.url));
+  const image = 'ghcr.io/me/my-integration:1.0.0';
+  const files = {
+    'package.json': JSON.stringify({ version: '1.0.0' }),
+    'package-lock.json': JSON.stringify({
+      version: '1.0.0',
+      packages: { '': { version: '1.0.0' } },
+    }),
+    'gladys-assistant-integration.json': `{
+  "version": "1.0.0",
+  "docker_image": "${image}"
+}
+`,
+    'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n\n- Initial functionality.\n',
+  };
+  for (const [file, text] of Object.entries(files)) await writeFile(join(cwd, file), text);
+  const run = (...args) =>
+    spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
+  const prepared = run('prepare', '1.0.0', image, REPO);
+  assert.equal(prepared.status, 0, prepared.stderr);
+  const checked = run('check', '1.0.0', image);
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.equal(JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8')).version, '1.0.0');
+  const changelog = await readFile(join(cwd, 'CHANGELOG.md'), 'utf8');
+  assert.equal(releaseNotes(changelog, '1.0.0'), '- Initial functionality.');
+
+  // Each mismatch is independently rejected, rather than merely failing because
+  // another file is already inconsistent.
+  const invalid = [
+    ['package.json', JSON.stringify({ version: '1.0.1' })],
+    [
+      'package-lock.json',
+      JSON.stringify({ version: '1.0.1', packages: { '': { version: '1.0.0' } } }),
+    ],
+    [
+      'package-lock.json',
+      JSON.stringify({ version: '1.0.0', packages: { '': { version: '1.0.1' } } }),
+    ],
+    [
+      'gladys-assistant-integration.json',
+      JSON.stringify({ version: '1.0.1', docker_image: image }),
+    ],
+    [
+      'gladys-assistant-integration.json',
+      JSON.stringify({ version: '1.0.0', docker_image: `${image}-wrong` }),
+    ],
+    ['CHANGELOG.md', files['CHANGELOG.md']],
+    [
+      'CHANGELOG.md',
+      changelog.replace('## [Unreleased]', '## [Unreleased]\n\n- Not yet released.'),
+    ],
+  ];
+  for (const [file, text] of invalid) {
+    const original = await readFile(join(cwd, file), 'utf8');
+    await writeFile(join(cwd, file), text);
+    assert.notEqual(run('check', '1.0.0', image).status, 0, `Must reject inconsistent ${file}`);
+    await writeFile(join(cwd, file), original);
+  }
+  assert.notEqual(run('check', '1.0.1', image).status, 0, 'Must reject the wrong tag version');
+  assert.notEqual(run('check', '01.0.0', image).status, 0, 'Must reject non-semver versions');
 });

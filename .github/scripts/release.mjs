@@ -10,6 +10,10 @@
 //     Prints the changelog section of <version> (nothing when there is none):
 //     the notes of its GitHub Release.
 //
+//   node .github/scripts/release.mjs check <version> <docker-image>
+//     Refuses publication unless package, lockfile, manifest and changelog
+//     describe the exact version being released.
+//
 // Both files are edited in place instead of being re-printed (jq,
 // JSON.stringify...), so the release commit keeps the Prettier layout and
 // `npm run format:check` stays green. test/release.test.js checks it against
@@ -143,10 +147,10 @@ export function rollChangelog(text, version, date, repoUrl) {
   // gets its own links at its first release.
   const previous = /^## \[(\d+\.\d+\.\d+)\]/m.exec(rest)?.[1];
   const links =
-    `[Unreleased]: ${repoUrl}/compare/v${version}...HEAD\n` +
+    `[Unreleased]: ${repoUrl}/compare/${version}...HEAD\n` +
     (previous
-      ? `[${version}]: ${repoUrl}/compare/v${previous}...v${version}`
-      : `[${version}]: ${repoUrl}/releases/tag/v${version}`);
+      ? `[${version}]: ${repoUrl}/compare/${previous}...${version}`
+      : `[${version}]: ${repoUrl}/releases/tag/${version}`);
   const unreleasedLink = /^\[Unreleased\]: .*$/m;
   result = unreleasedLink.test(result)
     ? result.replace(unreleasedLink, () => links)
@@ -172,9 +176,10 @@ export function releaseNotes(text, version) {
 const isMain = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
 if (isMain) {
   const [command, version, ...args] = process.argv.slice(2);
-  if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version ?? '')) {
     console.error('Usage: release.mjs prepare <x.y.z> <docker-image> <repo-url>');
     console.error('       release.mjs notes <x.y.z> < CHANGELOG.md');
+    console.error('       release.mjs check <x.y.z> <docker-image>');
     process.exit(1);
   }
 
@@ -199,6 +204,29 @@ if (isMain) {
     }
   } else if (command === 'notes') {
     process.stdout.write(releaseNotes(readFileSync(0, 'utf8'), version));
+  } else if (command === 'check') {
+    const [dockerImage] = args;
+    assert.ok(dockerImage, 'Expected Docker image is required');
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+    const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+    const manifest = JSON.parse(readFileSync(MANIFEST_FILE, 'utf8'));
+    assert.equal(pkg.version, version, 'package.json version must match the release tag');
+    assert.equal(lock.version, version, 'package-lock.json version must match the release tag');
+    assert.equal(
+      lock.packages[''].version,
+      version,
+      'Lockfile root package must match the release tag',
+    );
+    assert.equal(manifest.version, version, 'Manifest version must match the release tag');
+    assert.equal(manifest.docker_image, dockerImage, 'Manifest must point to the released image');
+    const changelog = readFileSync(CHANGELOG_FILE, 'utf8');
+    assert.ok(releaseNotes(changelog, version), 'Release notes must exist for the release tag');
+    assert.equal(
+      releaseNotes(changelog, 'Unreleased'),
+      '',
+      'Move Unreleased entries into the release',
+    );
+    console.log(`Release metadata matches ${version}.`);
   } else {
     console.error(`Unknown command "${command}"`);
     process.exit(1);

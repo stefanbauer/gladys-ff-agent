@@ -6,6 +6,8 @@ Changes to FF-Agent for Gladys Assistant. Nothing has been released yet.
 
 ### Changed
 
+- Release only on explicit version tags without a `v` prefix or a manual release request, with an initial-version option, matching metadata checks and CI on the exact release commit before publishing multi-architecture images and the GitHub Release.
+- Rewrite the README in English around setup, daily use, troubleshooting and local development; keep publishing instructions in a separate maintainer guide.
 - Use matching blue primary buttons for widget acceptance and rejection, retaining distinct check and X icons.
 - Redesign the incident widget around idle, open alarm and sent acceptance states, with a local End incident button instead of a countdown, immediate dismissal after rejection/no-active-incident responses, retained last-reply history and protection against concurrent response clicks. Errors keep alarms open; no operational confirmation is implied. Label the reply time clearly and remove the operational verification prompt in all languages.
 - Send reply validation and HTTP error messages as separate English, French and German translations, selected by Gladys rather than displayed together.
@@ -21,6 +23,8 @@ Changes to FF-Agent for Gladys Assistant. Nothing has been released yet.
 
 ### Added
 
+- Release preparation runbook covering GitHub-URL installation without store discovery, GHCR visibility and supported container platforms; CI now runs application tests inside the production image with networking disabled and sandbox limits.
+- Source repository metadata on published container images to link the GHCR package to its GitHub repository without changing package visibility.
 - Privacy-safe diagnostic logs for alarm reception, event publication, reply attempts and HTTP/network outcomes; document local-terminal versus production-container logs and the supervision Start button.
 - Native Gladys Plus alarm webhook (POST JSON `{}`), ignoring payload details and generating only a local reception timestamp.
 - Concise configuration and FF-Agent webhook setup texts in English, French and German.
