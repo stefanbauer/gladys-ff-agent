@@ -1,8 +1,15 @@
 # Changelog
 
-Changes to FF-Agent for Gladys Assistant. Nothing has been released yet.
+Changes to FF-Agent for Gladys Assistant.
 
 ## [Unreleased]
+
+### Changed
+
+- Send widget accept and decline responses immediately on click, without a browser confirmation dialog.
+- Record the sent decision in reply history separately from FF-Agent's no-active-incident response, and remove redundant HTTP-success text from the widget.
+- Display reception and reply times in the browser's local timezone through Gladys's native date rendering, instead of fixed UTC strings.
+- Document installation from the GitHub repository URL using the published public images.
 
 ## [1.0.0] - 2026-10-18
 

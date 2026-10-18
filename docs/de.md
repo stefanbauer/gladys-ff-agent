@@ -90,7 +90,7 @@ Niemals Tokens, Passwörter oder reale Einsatzdaten ins Repository übernehmen.
 
 „Kein Alarm“ heißt: kein offener, lokal empfangener Alarm – keine Prüfung von
 FF-Agent oder der Alarmverbindung. Ein Alarm zeigt einen roten Status, Empfangszeit
-und Zu-/Absagebuttons mit Bestätigung. Testalarme bleiben klar erkennbar.
+und Zu-/Absagebuttons ohne zusätzliche Bestätigungsabfrage. Testalarme bleiben klar erkennbar.
 Nach erfolgreicher HTTP-Zusage zeigt das Widget „Gesendet“, bis „Einsatz beenden“
 gedrückt wird. Danach wieder Ruhe mit letzter Rückmeldung und Rückmeldezeit.
 Eine erfolgreiche HTTP-Absage oder „kein aktiver Einsatz“ beendet die lokale
@@ -100,7 +100,9 @@ können ihn nicht quittieren. Szenen-/Konfigurationsaktionen aktualisieren diese
 Die Anzeige bestätigt nur HTTP-Zustellung, nicht die operative Rückmeldung.
 „Einsatz beenden“ setzt nur die Anzeige zurück und sendet nichts an FF-Agent.
 Die Anzeige aktualisiert sich regulär alle zehn Sekunden;
-Browserpausen/Verbindungsfehler können die Anzeige verzögern. Zeiten sind in UTC.
+Browserpausen/Verbindungsfehler können die Anzeige verzögern. Zeiten erscheinen in
+der lokalen Zeitzone deines Browsers. Die Historie zeigt die gesendete Entscheidung;
+eine ausdrückliche FF-Agent-Antwort „kein aktiver Einsatz“ erscheint separat.
 Nur letzter Alarm und letzte erfolgreiche Anfrage bleiben im Speicher, bis zum Neustart.
 
 **Überwachung → Starten** startet den Docker-Container, bei laufendem Container

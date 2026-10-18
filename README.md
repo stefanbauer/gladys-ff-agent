@@ -19,8 +19,21 @@ and use alarms in your scenes and dashboard.
 - **Gladys Plus and an Open API key only for incoming FF-Agent alarms.** Replies
   and local alarm simulation work without Plus.
 
-**This integration is not released yet.** There is no published container image
-or Gladys Store entry. For now, use the [local development setup](#local-development).
+## Installation
+
+In Gladys, open **Integrations**, choose installation from a GitHub URL, and enter:
+
+```text
+https://github.com/stefanbauer/gladys-ff-agent
+```
+
+Gladys reads the manifest and downloads the matching public container image
+automatically. Images support `linux/amd64` and `linux/arm64`, including Linux
+containers on Docker Desktop for Intel and Apple Silicon Macs.
+
+Once indexed, the integration is also available in the Gladys Store. GitHub-URL
+installation works independently of catalog indexing. Install future releases
+through Gladys's integration update controls; no manual Docker commands are needed.
 
 ## Configure responses
 
@@ -62,16 +75,18 @@ Gladys before relying on it.
 
 Add the **FF-Agent incident** widget to a dashboard:
 
-| State                               | Behavior                                                                                        |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------- |
-| No alarm                            | No locally received alarm is open. This is not a check of FF-Agent or the alarm connection.     |
-| Alarm                               | Shows the reception time and confirmation buttons to accept or decline.                         |
-| Acceptance sent                     | Stays visible until **End incident**, which only clears the local display and sends no request. |
-| Rejection sent / no active incident | Returns to idle immediately and retains the last reply and its time.                            |
-| Error or timeout                    | Keeps the alarm open. Check FF-Agent before trying again.                                       |
+| State                               | Behavior                                                                                              |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| No alarm                            | No locally received alarm is open. This is not a check of FF-Agent or the alarm connection.           |
+| Alarm                               | Shows the reception time and buttons to accept or decline immediately, without a confirmation dialog. |
+| Acceptance sent                     | Stays visible until **End incident**, which only clears the local display and sends no request.       |
+| Rejection sent / no active incident | Returns to idle immediately and retains the last reply and its time.                                  |
+| Error or timeout                    | Keeps the alarm open. Check FF-Agent before trying again.                                             |
 
 A new alarm reopens the widget. The display normally refreshes every ten seconds.
-Alarm and reply history are held in memory and cleared on restart. Times are UTC.
+Alarm and reply history are held in memory and cleared on restart. Times use your
+browser's local timezone. Reply history records the decision sent; an explicit
+FF-Agent “no active incident” response is shown separately, not as the last decision.
 
 In scenes, choose **Incident received** as the trigger and **Accept incident** or
 **Decline incident** as actions. The trigger exposes only `received_at`, the
@@ -140,11 +155,12 @@ Run checks before submitting changes:
 npm run format:check
 npm run lint
 npm test
-npx github:GladysAssistant/integration-store --skip-image-check .
+npx github:GladysAssistant/integration-store .
 ```
 
 Tests use the SDK test environment and injected HTTP responses, not real FF-Agent
-requests. The validator's image check is skipped while no release image exists.
+requests. For an unpublished candidate whose image does not exist yet, use the
+validator's `--skip-image-check` option, then repeat the full check after publication.
 The production `Dockerfile` packages the application itself; `Dockerfile.dev` is
 only the idle registration container used by the local helper.
 

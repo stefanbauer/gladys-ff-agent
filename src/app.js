@@ -5,11 +5,6 @@ import { getReplySettings, localizedError, sendReply } from './ff-agent.js';
 const HISTORY_LABELS = {
   accepted: { en: 'Acceptance sent', fr: 'Acceptation envoyée', de: 'Zusage gesendet' },
   declined: { en: 'Rejection sent', fr: 'Refus envoyé', de: 'Absage gesendet' },
-  no_active_incident: {
-    en: 'No active incident',
-    fr: 'Aucune intervention',
-    de: 'Kein aktiver Einsatz',
-  },
 };
 const RESPONSE_LABELS = {
   no_active_incident: {
@@ -101,6 +96,7 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
       const result = await sendReply(settings, decision, request);
       const repliedAt = Date.now();
       lastReply = {
+        decision,
         response: result.response,
         replied_at: repliedAt,
         test: currentIncident?.test || false,
@@ -136,25 +132,16 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
     });
   }
 
-  gladys.onWidgetGet('incident', ({ language = 'en' } = {}) => {
+  gladys.onWidgetGet('incident', () => {
     const pending = incident?.response === 'pending';
     const accepted = incident?.response === 'accepted';
-    const formatTime = (value) =>
-      `${new Intl.DateTimeFormat(language, {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-        timeZone: 'UTC',
-      }).format(new Date(value))} UTC`;
     const items = [];
+    const dates = [];
     if (pending || accepted) {
-      items.push({
-        label: { en: 'Received', fr: 'Reçue le', de: 'Empfangen' },
-        value: formatTime(incident.received_at),
-        icon: 'bell',
-        color: pending ? 'danger' : 'neutral',
+      dates.push({
+        title: { en: 'Received', fr: 'Reçue le', de: 'Empfangen' },
+        // An explicit offset keeps midnight an instant, not a calendar-only date in Gladys.
+        date: incident.received_at.replace('Z', '+00:00'),
       });
     }
     if (lastReply) {
@@ -167,20 +154,14 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
             : lastReply.test
               ? { en: 'Last test reply', fr: 'Dernier test', de: 'Letzter Test' }
               : { en: 'Last reply', fr: 'Dernière réponse', de: 'Letzte Antwort' },
-          value: HISTORY_LABELS[lastReply.response],
-          icon:
-            lastReply.response === 'accepted'
-              ? 'check'
-              : lastReply.response === 'declined'
-                ? 'x'
-                : 'info',
-          color: lastReply.response === 'no_active_incident' ? 'info' : 'success',
+          value: HISTORY_LABELS[lastReply.decision],
+          icon: lastReply.decision === 'accepted' ? 'check' : 'x',
+          color: 'success',
         });
       }
-      items.push({
-        label: { en: 'Replied at', fr: 'Réponse à', de: 'Rückmeldung um' },
-        value: formatTime(lastReply.replied_at),
-        icon: 'clock',
+      dates.push({
+        title: { en: 'Replied at', fr: 'Réponse à', de: 'Rückmeldung um' },
+        date: new Date(lastReply.replied_at).toISOString().replace('Z', '+00:00'),
       });
     }
     return {
@@ -211,39 +192,38 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
           icon: pending ? 'bell' : accepted ? 'check-circle' : 'bell-off',
           color: pending ? 'danger' : accepted ? 'success' : 'neutral',
         },
-        {
-          type: 'text',
-          variant: 'body',
-          text: pending
-            ? incident.test
-              ? {
-                  en: 'Test alarm. Accept or decline — both buttons send REAL replies to FF-Agent.',
-                  fr: 'Alerte de test. Accepter ou refuser envoie une VRAIE réponse à FF-Agent.',
-                  de: 'Testalarm. Zu- oder absagen — beide Buttons senden ECHTE Rückmeldungen an FF-Agent.',
-                }
-              : {
-                  en: 'Please accept or decline. Your reply is sent directly to FF-Agent.',
-                  fr: 'Acceptez ou refusez. Votre réponse est envoyée directement à FF-Agent.',
-                  de: 'Bitte zu- oder absagen. Deine Rückmeldung geht direkt an FF-Agent.',
-                }
-            : lastReply
-              ? lastReply.response === 'no_active_incident'
-                ? {
-                    en: 'Request successful (HTTP). FF-Agent reports no active incident.',
-                    fr: 'Requête réussie (HTTP). FF-Agent indique qu’aucune intervention n’est active.',
-                    de: 'Anfrage erfolgreich (HTTP). FF-Agent meldet aktuell keinen aktiven Einsatz.',
-                  }
-                : {
-                    en: 'Reply sent successfully (HTTP).',
-                    fr: 'Réponse envoyée avec succès (HTTP).',
-                    de: 'Rückmeldung erfolgreich gesendet (HTTP).',
-                  }
-              : {
-                  en: 'Incoming alarms appear here. No alarm received in this session yet.',
-                  fr: 'Les alertes reçues apparaissent ici. Aucune alerte reçue dans cette session.',
-                  de: 'Eingehende Alarmierungen erscheinen hier. In dieser Sitzung noch keinen Alarm empfangen.',
-                },
-        },
+        ...(pending || !lastReply || lastReply.response === 'no_active_incident'
+          ? [
+              {
+                type: 'text',
+                variant: 'body',
+                text: pending
+                  ? incident.test
+                    ? {
+                        en: 'Test alarm. Accept or decline — both buttons send REAL replies to FF-Agent.',
+                        fr: 'Alerte de test. Accepter ou refuser envoie une VRAIE réponse à FF-Agent.',
+                        de: 'Testalarm. Zu- oder absagen — beide Buttons senden ECHTE Rückmeldungen an FF-Agent.',
+                      }
+                    : {
+                        en: 'Please accept or decline. Your reply is sent directly to FF-Agent.',
+                        fr: 'Acceptez ou refusez. Votre réponse est envoyée directement à FF-Agent.',
+                        de: 'Bitte zu- oder absagen. Deine Rückmeldung geht direkt an FF-Agent.',
+                      }
+                  : lastReply
+                    ? {
+                        en: 'FF-Agent reports no active incident.',
+                        fr: 'FF-Agent indique qu’aucune intervention n’est active.',
+                        de: 'FF-Agent meldet aktuell keinen aktiven Einsatz.',
+                      }
+                    : {
+                        en: 'Incoming alarms appear here. No alarm received in this session yet.',
+                        fr: 'Les alertes reçues apparaissent ici. Aucune alerte reçue dans cette session.',
+                        de: 'Eingehende Alarmierungen erscheinen hier. In dieser Sitzung noch keinen Alarm empfangen.',
+                      },
+              },
+            ]
+          : []),
+        ...(dates.length ? [{ type: 'card-list', items: dates }] : []),
         ...(items.length ? [{ type: 'status', items }] : []),
         ...(accepted
           ? [
@@ -274,7 +254,6 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
                 action: {
                   key: 'accept',
                   params: { incident_id: incident.incident_id },
-                  confirm: true,
                 },
               },
               {
@@ -285,7 +264,6 @@ export function registerHandlers(gladys, request = globalThis.fetch) {
                 action: {
                   key: 'decline',
                   params: { incident_id: incident.incident_id },
-                  confirm: true,
                 },
               },
             ]

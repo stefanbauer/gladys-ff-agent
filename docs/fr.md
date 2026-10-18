@@ -80,7 +80,7 @@ ni de données opérationnelles. Consultez le README pour les instructions déta
 
 « En veille » signifie qu’aucune alerte reçue localement n’attend de réponse ; cela
 ne vérifie ni FF-Agent ni la connexion d’alarme. Une alerte affiche un état rouge,
-l’heure de réception et des boutons accepter/refuser avec confirmation. Les tests
+l’heure de réception et des boutons accepter/refuser sans confirmation supplémentaire. Les tests
 restent identifiés. Après une acceptation HTTP réussie, « Envoyée » reste visible
 jusqu’à l’appui sur « Terminer l’intervention », puis le widget revient en veille
 avec la dernière réponse et son heure. Un refus HTTP
@@ -91,7 +91,9 @@ simultanés ne peuvent pas l’acquitter. Scènes et configuration actualisent l
 historique. Cela ne confirme pas la réponse opérationnelle. « Terminer l’intervention »
 réinitialise uniquement l’affichage et n’envoie rien à FF-Agent.
 L’affichage se rafraîchit normalement toutes les dix secondes ; une pause
-du navigateur ou une déconnexion peut retarder l’affichage. Les heures sont en UTC.
+du navigateur ou une déconnexion peut retarder l’affichage. Les heures utilisent
+le fuseau local du navigateur. L’historique indique la décision envoyée ; une réponse
+explicite de FF-Agent sans intervention active s’affiche séparément.
 Seules la dernière alerte et la dernière requête réussie restent en mémoire ; un redémarrage les efface.
 
 **Supervision → Démarrer** démarre/redémarre le conteneur Docker, même déjà actif.

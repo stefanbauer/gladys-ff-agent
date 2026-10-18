@@ -134,7 +134,10 @@ test('simulation publishes only the locally generated reception time, without fi
     assert.ok(text[language]);
     assert.equal(text[language].includes('demo-'), false);
   }
-  assert.ok(widget.components.find((c) => c.type === 'status').items[0].value.includes('13:24'));
+  assert.equal(
+    widget.components.find((c) => c.type === 'card-list').items[0].date,
+    '2026-10-16T13:24:35.678+00:00',
+  );
   assert.equal(widget.components.find((c) => c.type === 'value').value.en, 'TEST ALARM');
   const buttons = widget.components.filter((c) => c.type === 'button');
   assert.deepEqual(
@@ -142,7 +145,7 @@ test('simulation publishes only the locally generated reception time, without fi
     ['accept', 'decline'],
   );
   for (const button of buttons) {
-    assert.equal(button.action.confirm, true);
+    assert.ok(!button.action.confirm, 'Widget replies must not request a confirmation dialog');
   }
 });
 
@@ -191,7 +194,10 @@ test('POST webhooks publish only local reception time and show a real alarm; oth
   const widget = await content(gladys);
   assert.equal(JSON.stringify(widget).includes('PRIVATE'), false);
   assert.equal(widget.components.find((c) => c.type === 'value').value.de, 'ALARM');
-  assert.ok(widget.components.find((c) => c.type === 'status').items[0].value.includes('17:18'));
+  assert.equal(
+    widget.components.find((c) => c.type === 'card-list').items[0].date,
+    '2026-10-16T17:18:19.123+00:00',
+  );
   assert.equal(widget.components.filter((c) => c.type === 'button').length, 2);
 });
 
@@ -328,8 +334,12 @@ test('widget acceptance remains until locally ended, preserving history without 
   assert.equal(finish.action.key, 'finish');
   for (const language of ['en', 'fr', 'de']) {
     assert.ok(finish.label[language]);
-    assert.ok(widget.components.find((c) => c.type === 'status').items[1].label[language]);
+    assert.ok(widget.components.find((c) => c.type === 'card-list').items[1].title[language]);
   }
+  assert.equal(
+    widget.components.some((c) => c.variant === 'body'),
+    false,
+  );
   t.mock.timers.tick(3600000);
   widget = await content(gladys);
   assert.equal(widget.components[0].value.en, 'Sent');
@@ -346,7 +356,10 @@ test('widget acceptance remains until locally ended, preserving history without 
   );
   const history = widget.components.find((c) => c.type === 'status').items;
   assert.equal(history[0].value.en, 'Acceptance sent');
-  assert.ok(history[1].value.includes('09:43'));
+  assert.equal(
+    widget.components.find((c) => c.type === 'card-list').items[0].date,
+    '2026-10-17T09:43:00.000+00:00',
+  );
   assert.equal(requests, 1);
   await gladys.fake.webhook('incident', { method: 'POST', body: '{}' });
   widget = await content(gladys);
@@ -376,6 +389,10 @@ test('declining immediately returns idle and records the reply in all widget lan
     assert.ok(history[0].label[language]);
     assert.ok(history[0].value[language]);
     assert.equal(history[0].value.en, 'Rejection sent');
+    assert.equal(
+      widget.components.some((c) => c.variant === 'body'),
+      false,
+    );
   }
 });
 
@@ -415,7 +432,7 @@ test('a new alarm interrupts the acceptance display and concurrent reply clicks 
   assert.equal(requests, 2);
 });
 
-test('the observed no-active-incident HTTP 200 response is not an acceptance or rejection', async () => {
+test('history records the sent decision separately from FF-Agent reporting no active incident', async () => {
   for (const decision of ['accept', 'decline']) {
     const gladys = await world(
       undefined,
@@ -426,7 +443,9 @@ test('the observed no-active-incident HTTP 200 response is not an acceptance or 
     assert.equal(scene.success, true);
     assert.deepEqual(scene.data.outputs, { success: true });
     await gladys.fake.action('simulate_incident');
-    const ack = await gladys.fake.action(`${decision}_incident`);
+    const params = (await content(gladys)).components.find((c) => c.type === 'button').action
+      .params;
+    const ack = await gladys.fake.widgetAction('incident', decision, params);
     const expected = {
       en: 'HTTP 200 OK — no active incident',
       fr: 'HTTP 200 OK — aucune intervention active',
@@ -434,9 +453,18 @@ test('the observed no-active-incident HTTP 200 response is not an acceptance or 
     };
     assert.equal(ack.success, true);
     assert.deepEqual(ack.data.message, expected);
-    const status = (await content(gladys)).components.find((c) => c.type === 'status');
-    assert.equal(status.items[0].value.en, 'No active incident');
-    assert.equal((await content(gladys)).components[0].value.en, 'No alarm');
+    const widget = await content(gladys);
+    const status = widget.components.find((c) => c.type === 'status');
+    assert.equal(
+      status.items[0].value.en,
+      decision === 'accept' ? 'Acceptance sent' : 'Rejection sent',
+    );
+    assert.deepEqual(widget.components.find((c) => c.variant === 'body').text, {
+      en: 'FF-Agent reports no active incident.',
+      fr: 'FF-Agent indique qu’aucune intervention n’est active.',
+      de: 'FF-Agent meldet aktuell keinen aktiven Einsatz.',
+    });
+    assert.equal(widget.components[0].value.en, 'No alarm');
   }
 });
 

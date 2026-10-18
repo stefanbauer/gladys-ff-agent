@@ -77,8 +77,8 @@ tokens or actual incident data. See the repository README for setup and logs.
 ## Widget: alarms and replies
 
 “No alarm” means no open alarm received locally, not verification of FF-Agent or
-the alarm connection. An alarm shows a red state, reception time and confirmation
-buttons for acceptance/rejection. Test alarms are clearly marked.
+the alarm connection. An alarm shows a red state, reception time and buttons
+for immediate acceptance/rejection, without a confirmation dialog. Test alarms are clearly marked.
 After a successful HTTP acceptance, “Sent” remains until “End incident” is pressed,
 then idle returns with the last reply and reply time. A successful
 HTTP rejection or explicit no-active-incident response returns idle immediately.
@@ -87,7 +87,9 @@ acceptance displays; stale/concurrent clicks cannot dismiss them. Scene/configur
 actions update the same history. None of this proves an operational mission reply.
 “End incident” only resets the display and sends nothing to FF-Agent.
 The display refreshes normally every ten seconds; browser
-suspension or connection failures may delay the display. Times are UTC. Only the last
+suspension or connection failures may delay the display. Times use your browser's
+local timezone. History records the decision sent; an explicit FF-Agent “no active
+incident” response is shown separately. Only the last
 alarm and successful request remain in memory; a restart clears both.
 
 **Supervision → Start** starts/restarts the Docker container, even when already

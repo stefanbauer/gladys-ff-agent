@@ -3,8 +3,10 @@
 This guide covers production-container checks and publishing. For installation,
 configuration and local development, see the [README](../README.md).
 
-**Current status:** no release image is published. Store discovery is intentionally
-disabled; leave the `gladys-assistant-integration` topic unset.
+Public release images are available on GHCR, and GitHub-URL installation has been
+verified in production. Store discovery was approved by the maintainer for the
+1.0.1 release. Verify the new public image before enabling discovery; catalog
+appearance remains subject to the next successful indexer run.
 
 ## 1. Check the release candidate
 
@@ -116,10 +118,10 @@ instance and check startup, configuration and the widget. This requires a public
 repository and public image, but **no discovery topic**. Update the README's
 availability notice when the release is actually installable.
 
-## 4. Optional store listing
+## 4. Store listing
 
-Keep this step disabled until catalog discovery is separately approved. Adding
-the repository **topic** `gladys-assistant-integration` enables automatic discovery.
+Catalog discovery has been separately approved for this repository. Adding the
+repository **topic** `gladys-assistant-integration` enables automatic discovery.
 The indexer normally runs hourly; no maintainer PR or manual review is required.
 Check its rejection report if the integration does not appear.
 

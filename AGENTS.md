@@ -48,8 +48,10 @@ Inspect widgets rendered in real Gladys when changing their content.
 
 Add user-visible changes to `CHANGELOG.md` under Unreleased. Versions are managed
 by the retained Release workflow; keep package, lockfile, manifest and image tag
-aligned. The source repository is public, but has no public image or catalog entry.
-The user explicitly forbids a Gladys Store listing at this stage. Never add the
-`gladys-assistant-integration` GitHub topic: it opts a public repository into indexing.
+aligned. The source repository and release images are public. The user approved
+Gladys Store discovery for release 1.0.1: add the `gladys-assistant-integration`
+GitHub topic only after verifying that release's public image. Verify catalog
+indexing separately; setting the topic alone does not prove store availability.
 Publishing an image, creating a release, pushing release tags, or enabling catalog
-discovery needs separate explicit user authorization. Normal CI only builds, never pushes images.
+discovery needs explicit user authorization; approval of 1.0.1 does not authorize
+future releases. Normal CI only builds, never pushes images.
