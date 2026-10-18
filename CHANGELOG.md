@@ -4,6 +4,8 @@ Changes to FF-Agent for Gladys Assistant.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-18
+
 ### Changed
 
 - Send widget accept and decline responses immediately on click, without a browser confirmation dialog.
@@ -50,5 +52,6 @@ Changes to FF-Agent for Gladys Assistant.
 - Recognizes the observed FF-Agent HTTP 200 message for no matching active incident instead of reporting acceptance or rejection.
 - Repository-root 800×534 JPEG cover with the FF-Agent logo and wordmark on a seamless edge-to-edge red gradient, with a GitHub raw-image manifest reference prepared for publication.
 
-[Unreleased]: https://github.com/stefanbauer/gladys-ff-agent/compare/1.0.0...HEAD
+[Unreleased]: https://github.com/stefanbauer/gladys-ff-agent/compare/1.0.1...HEAD
+[1.0.1]: https://github.com/stefanbauer/gladys-ff-agent/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/stefanbauer/gladys-ff-agent/releases/tag/1.0.0
