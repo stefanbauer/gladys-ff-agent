@@ -63,6 +63,9 @@ test('manifest declares a version-aligned provider without device or network per
   for (const capability of ['network_discovery', 'containers']) {
     assert.equal(manifest[capability], undefined);
   }
+  // Replies go to ff-agent.com and alarms arrive through the Gladys Plus relay:
+  // the catalog's Cloud filter reads this tag.
+  assert.deepEqual(manifest.transports, ['cloud']);
 });
 
 test('acceptance validates settings before sending, uses the selected house and keeps the UUID out of results', async () => {

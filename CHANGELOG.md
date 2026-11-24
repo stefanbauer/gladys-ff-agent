@@ -4,6 +4,10 @@ Changes to FF-Agent for Gladys Assistant.
 
 ## [Unreleased]
 
+### Changed
+
+- Declare `transports: ["cloud"]` (FF-Agent replies and the Gladys Plus webhook relay), so the Cloud filter of the Gladys catalog finds the integration.
+
 ## [1.0.1] - 2026-10-18
 
 ### Changed

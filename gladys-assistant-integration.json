@@ -12,6 +12,7 @@
   "gladys_version": ">=5.2.1",
   "cover_image": "https://raw.githubusercontent.com/stefanbauer/gladys-ff-agent/main/cover.jpg",
   "categories": ["notifications", "services"],
+  "transports": ["cloud"],
   "location": true,
   "webhooks": [
     {
